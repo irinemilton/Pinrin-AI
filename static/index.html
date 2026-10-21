@@ -3,191 +3,219 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PinPilot AI - Automated Pinterest & Gumroad Digital Business Studio</title>
-  <meta name="description" content="Upload digital products once. PinPilot automatically creates your Gumroad digital product listing and publishes high-converting Pinterest Pins.">
+  <title>PinPilot - Automated Pinterest & Gumroad Pipeline</title>
+  <meta name="description" content="Automated Pinterest to Gumroad Digital Product Pipeline.">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📌</text></svg>">
 </head>
 <body>
 
-  <!-- Top Navigation Header -->
-  <header class="header">
-    <div class="header-container">
+  <!-- Top Navigation Bar -->
+  <header class="top-nav">
+    <div class="nav-container">
       <div class="brand">
-        <div class="brand-icon">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 0a12 12 0 0 0-4.37 23.18c-.06-.98-.12-2.48.02-3.55.13-.97.87-6.23.87-6.23s-.22-.44-.22-1.1c0-1.03.6-1.8 1.34-1.8.63 0 .94.47.94 1.04 0 .64-.4 1.59-.62 2.47-.18.73.37 1.33 1.09 1.33 1.31 0 2.32-1.38 2.32-3.37 0-1.76-1.27-2.99-3.08-2.99-2.25 0-3.57 1.69-3.57 3.43 0 .68.26 1.41.59 1.81.06.08.07.15.05.23-.07.28-.22.9-.25 1.03-.04.16-.13.2-.3.12-1.12-.52-1.82-2.15-1.82-3.46 0-2.82 2.05-5.41 5.91-5.41 3.1 0 5.51 2.21 5.51 5.16 0 3.08-1.94 5.56-4.64 5.56-.91 0-1.76-.47-2.05-1.03l-.56 2.13c-.2.78-.75 1.76-1.12 2.36A12 12 0 1 0 12 0z"/>
-          </svg>
-        </div>
-        <div>
-          <span class="brand-title">PinPilot</span>
-          <span class="brand-tag">Autonomous Pipeline</span>
-        </div>
+        <span class="brand-dot"></span>
+        <span class="brand-name">PinPilot</span>
+        <span class="brand-version">v1.0</span>
       </div>
 
-      <div class="header-status">
-        <div class="status-badge" id="pinterest-status-badge">
-          <span class="status-dot dot-amber" id="pinterest-status-dot"></span>
-          <span id="pinterest-status-text">Pinterest: Checking...</span>
+      <div class="nav-status">
+        <div class="status-pill" id="pill-pinterest">
+          <span class="status-indicator indicator-amber" id="dot-pinterest"></span>
+          <span id="text-pinterest">Pinterest: Checking</span>
         </div>
-        <div class="status-badge" id="gumroad-status-badge">
-          <span class="status-dot dot-amber" id="gumroad-status-dot"></span>
-          <span id="gumroad-status-text">Gumroad: Checking...</span>
+        <div class="status-pill" id="pill-gumroad">
+          <span class="status-indicator indicator-amber" id="dot-gumroad"></span>
+          <span id="text-gumroad">Gumroad: Checking</span>
         </div>
       </div>
     </div>
   </header>
 
-  <!-- Main Studio Workspace -->
-  <main class="main-wrapper">
-    <!-- Left Column: Product Ingestion & Details -->
-    <section class="glass-card">
-      <h1 class="card-title">
-        <span>🚀 Product Launch Studio</span>
-      </h1>
-      <p class="card-subtitle">Upload your digital asset & pin creatives. The app creates your Gumroad store listing and auto-publishes optimized Pinterest Pins.</p>
-
-      <form id="upload-form">
-        <!-- Dual Dropzones -->
-        <div class="dropzone-container">
-          <!-- Digital Product File Dropzone -->
-          <div class="dropzone" id="product-dropzone">
-            <span class="dropzone-icon">📦</span>
-            <div class="dropzone-title">Digital Product File</div>
-            <div class="dropzone-desc">.zip, .pdf, .xlsx, .notion, .psd, etc.</div>
-            <input type="file" id="product-file-input" class="file-input" required>
-            <div id="product-file-display" class="preview-list"></div>
-          </div>
-
-          <!-- Pinterest Creatives Dropzone -->
-          <div class="dropzone" id="images-dropzone">
-            <span class="dropzone-icon">🖼️</span>
-            <div class="dropzone-title">Pinterest Creatives</div>
-            <div class="dropzone-desc">Drop 1 or more pin images (2:3 ratio)</div>
-            <input type="file" id="images-file-input" class="file-input" multiple accept="image/*" required>
-            <div id="images-thumb-display" class="image-thumbs"></div>
-          </div>
-        </div>
-
-        <!-- Title & Price -->
-        <div class="form-row">
-          <div class="form-group">
-            <label for="input-title">Product Title</label>
-            <input type="text" id="input-title" placeholder="e.g., Ultimate 2026 Monthly Budget Spreadsheet" required>
-          </div>
-          <div class="form-group">
-            <label for="input-price">Price (USD)</label>
-            <input type="text" id="input-price" placeholder="9.00" value="9.00" required>
-            <div class="input-helper">Will be listed on Gumroad automatically</div>
-          </div>
-        </div>
-
-        <!-- Board & Tags -->
-        <div class="form-row">
-          <div class="form-group">
-            <label for="input-board">Target Pinterest Board</label>
-            <input type="text" id="input-board" placeholder="e.g., Budget Planners & Financial Trackers">
-            <div class="input-helper">Auto-created if it doesn't already exist</div>
-          </div>
-          <div class="form-group">
-            <label for="input-tags">SEO Tags & Keywords</label>
-            <input type="text" id="input-tags" placeholder="budget planner, finance tracker, excel template">
-            <div class="input-helper">Converted into Pinterest hashtags automatically</div>
-          </div>
-        </div>
-
-        <!-- Description -->
-        <div class="form-group">
-          <label for="input-desc">Product Description & Copy</label>
-          <textarea id="input-desc" placeholder="Describe the transformation, features, and benefits of your digital product..."></textarea>
-        </div>
-
-        <!-- AI Marketing Variations Assistant -->
-        <div class="ai-variations-box">
-          <div class="ai-header">
-            <span class="ai-title">✨ AI Pinterest Hook Generator</span>
-            <button type="button" class="btn-magic" id="btn-generate-ai">Generate 3 Viral Hooks</button>
-          </div>
-          <div id="ai-variations-container">
-            <div class="variation-chip" data-title="✨ The Ultimate Monthly Budget Tracker" data-desc="Transform your finances today with this aesthetic and intuitive digital spreadsheet! Instant download.">
-              <div class="variation-title">✨ The Ultimate Monthly Budget Tracker</div>
-              <div class="variation-desc">Transform your finances today with this aesthetic and intuitive digital spreadsheet! Instant download.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Submit Button -->
-        <button type="submit" class="btn-submit" id="btn-publish">
-          <span>🚀 Launch to Gumroad & Pinterest</span>
-        </button>
-      </form>
-
-      <!-- Live Execution Progress Drawer -->
-      <div class="progress-container" id="progress-container">
-        <div class="progress-header">
-          <span>Execution Pipeline Status</span>
-          <span id="pipeline-overall-status">Processing...</span>
-        </div>
-        <div id="progress-steps-list"></div>
-      </div>
-    </section>
-
-    <!-- Right Column: Real-time Multi-Platform Mockup -->
-    <aside class="preview-sticky">
-      <div class="preview-tabs">
-        <button class="preview-tab-btn active" id="tab-btn-pinterest">Pinterest Pin Preview</button>
-        <button class="preview-tab-btn" id="tab-btn-gumroad">Gumroad Store Preview</button>
-      </div>
-
-      <!-- Pinterest Card Mockup -->
-      <div class="pin-mockup" id="preview-pinterest-card">
-        <div class="pin-mockup-image">
-          <img id="preview-pin-img" src="" alt="Pin Preview" style="display: none;">
-          <div class="pin-placeholder-content" id="preview-pin-empty">
-            <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem;">📌</span>
-            <p style="font-weight: 600; font-size: 0.9rem;">Drop a Pin Image</p>
-            <p style="font-size: 0.75rem;">Optimal 1000 x 1500 px (2:3)</p>
-          </div>
-          <button class="pin-save-btn">Save</button>
-          <div class="pin-dest-link" id="preview-pin-link">
-            <span>🔗</span>
-            <span id="preview-pin-link-text">gumroad.com/product</span>
-          </div>
-        </div>
-        <div class="pin-mockup-content">
-          <h2 class="pin-mockup-title" id="preview-pin-title">Your High-Converting Product Title</h2>
-          <p class="pin-mockup-desc" id="preview-pin-desc">Your product description and trending hashtags will display here in the user's Pinterest feed.</p>
-          <div class="pin-mockup-creator">
-            <div class="pin-avatar">P</div>
-            <div>
-              <div class="pin-creator-name">PinPilot Store</div>
-              <div style="font-size: 0.7rem; color: #6b7280;" id="preview-board-badge">Board: Digital Downloads</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Gumroad Card Mockup -->
-      <div class="gumroad-mockup" id="preview-gumroad-card" style="display: none;">
-        <span class="gumroad-price-pill" id="preview-gumroad-price">$9.00</span>
-        <h2 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem;" id="preview-gumroad-title">Ultimate 2026 Monthly Budget Spreadsheet</h2>
-        <p style="font-size: 0.85rem; color: #9ca3af; line-height: 1.4;" id="preview-gumroad-desc">Describe your digital product...</p>
-        <div class="gumroad-cta" id="preview-gumroad-cta">I want this! ($9.00)</div>
-      </div>
-    </aside>
-  </main>
-
-  <!-- Published Archive Section -->
-  <section class="archive-section">
-    <h2 class="card-title">
-      <span>📊 Published Products & Pins Archive</span>
-    </h2>
-    <p class="card-subtitle">Every product processed by PinPilot, with direct links to Gumroad checkout and live Pinterest pins.</p>
-
-    <div class="products-grid" id="products-grid">
-      <!-- Injected via JavaScript -->
+  <!-- Main Container -->
+  <main class="page-container">
+    <div class="page-hero">
+      <h1 class="hero-title">Automated Digital Product Pipeline</h1>
+      <p class="hero-desc">Store digital products, validate metadata, and automatically publish high-converting Pinterest Pins linking directly to Gumroad.</p>
     </div>
-  </section>
+
+    <!-- View Switcher Tabs -->
+    <div class="view-tabs">
+      <button class="tab-btn active" id="tab-pipeline">Pipeline Flow</button>
+      <button class="tab-btn" id="tab-mockup">Live Mockup</button>
+      <button class="tab-btn" id="tab-archive">Published Archive</button>
+    </div>
+
+    <!-- ========================================================
+         VIEW 1: THE EXACT 3-BOX PIPELINE FLOW
+         ======================================================== -->
+    <div id="view-pipeline-container">
+      <form id="pipeline-form">
+        <div class="pipeline-flow">
+          
+          <!-- Box 1: Dropbox Folder / Asset Ingestion -->
+          <div class="flow-card open" id="flow-card-1">
+            <div class="flow-title">Dropbox folder</div>
+            <div class="flow-subtitle">Store exported images and product files in a ready-to-publish folder.</div>
+            
+            <div class="card-content-drawer">
+              <div class="dual-dropzone">
+                <!-- Digital Product File -->
+                <div class="drop-box" id="drop-product">
+                  <span class="drop-icon">📦</span>
+                  <div class="drop-title">Digital Product File</div>
+                  <div class="drop-desc">.zip, .pdf, .xlsx, .notion, .psd</div>
+                  <input type="file" id="input-file-product" style="display: none;" required>
+                  <div id="product-file-preview" class="file-list"></div>
+                </div>
+
+                <!-- Pinterest Creatives -->
+                <div class="drop-box" id="drop-images">
+                  <span class="drop-icon">🖼️</span>
+                  <div class="drop-title">Pinterest Creatives</div>
+                  <div class="drop-desc">1 or more pin images (2:3 vertical)</div>
+                  <input type="file" id="input-file-images" style="display: none;" multiple accept="image/*" required>
+                  <div id="images-thumb-preview" class="thumbs-row"></div>
+                </div>
+              </div>
+              <div class="input-hint" style="text-align: center;">💡 Files are ingested directly into your ready-to-publish folder</div>
+            </div>
+          </div>
+
+          <!-- Down Arrow 1 -->
+          <div class="flow-arrow">↓</div>
+
+          <!-- Box 2: Your Python App / Metadata & Validation -->
+          <div class="flow-card open" id="flow-card-2">
+            <div class="flow-title">Your Python app</div>
+            <div class="flow-subtitle">Use the Dropbox API to fetch files and metadata, validate them, and prevent duplicate posts.</div>
+
+            <div class="card-content-drawer">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="input-title">Product Title</label>
+                  <input type="text" id="input-title" placeholder="e.g. Ultimate 2026 Monthly Budget Tracker" required>
+                </div>
+                <div class="form-group">
+                  <label for="input-price">Price (USD)</label>
+                  <input type="text" id="input-price" value="9.00" placeholder="9.00" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="input-board">Target Pinterest Board</label>
+                  <input type="text" id="input-board" placeholder="e.g. Budget Planners & Finance Trackers">
+                </div>
+                <div class="form-group">
+                  <label for="input-tags">SEO Keywords & Tags</label>
+                  <input type="text" id="input-tags" placeholder="budget planner, excel spreadsheet, finance">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="input-desc">Marketing Description</label>
+                <textarea id="input-desc" placeholder="Describe the transformation, features, and benefits of your digital product..."></textarea>
+              </div>
+
+              <!-- AI Hook Generator -->
+              <div class="ai-box">
+                <div class="ai-bar">
+                  <span class="ai-label">✨ AI Pinterest Hook Generator</span>
+                  <button type="button" class="btn-ai-gen" id="btn-ai-gen">Generate 3 Viral Hooks</button>
+                </div>
+                <div id="ai-chips-list">
+                  <div class="variation-chip" data-title="✨ The Ultimate Monthly Budget Tracker" data-desc="Transform your finances today with this aesthetic and intuitive digital spreadsheet! Instant download.">
+                    <div class="var-title">✨ The Ultimate Monthly Budget Tracker</div>
+                    <div class="var-desc">Transform your finances today with this aesthetic and intuitive digital spreadsheet! Instant download.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Down Arrow 2 -->
+          <div class="flow-arrow">↓</div>
+
+          <!-- Box 3: Pinterest API -> Gumroad / Execution -->
+          <div class="flow-card open" id="flow-card-3">
+            <div class="flow-title">Pinterest API → Gumroad</div>
+            <div class="flow-subtitle">Publish Pins pointing to your real product listing and track results.</div>
+
+            <div class="card-content-drawer">
+              <button type="submit" class="btn-launch" id="btn-submit-pipeline">
+                <span>Publish to Pinterest & Gumroad 🚀</span>
+              </button>
+
+              <!-- Real-time Execution Steps Drawer -->
+              <div class="execution-log" id="execution-log" style="display: none;">
+                <div style="font-weight: 600; margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
+                  <span>Pipeline Execution Status</span>
+                  <span id="exec-status-badge">Processing...</span>
+                </div>
+                <div id="exec-steps-container"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </form>
+    </div>
+
+    <!-- ========================================================
+         VIEW 2: LIVE MOCKUPS (Pinterest & Gumroad Previews)
+         ======================================================== -->
+    <div class="preview-section" id="view-mockup-container">
+      <!-- Pinterest Pin Preview -->
+      <div class="mockup-wrapper">
+        <div class="mockup-heading">Pinterest Feed Card</div>
+        <div class="pin-card-preview">
+          <div class="pin-img-area">
+            <img id="mock-pin-img" src="" alt="Pin Creative" style="display: none;">
+            <div id="mock-pin-empty" style="text-align: center; color: #a1a1aa; padding: 1rem;">
+              <span style="font-size: 2rem; display: block; margin-bottom: 0.3rem;">📌</span>
+              <p style="font-size: 0.85rem; font-weight: 600;">Pin Creative</p>
+              <p style="font-size: 0.7rem;">Optimal 1000 × 1500 px</p>
+            </div>
+            <div class="pin-badge-save">Save</div>
+            <div class="pin-badge-link" id="mock-pin-link">🔗 gumroad.com/product</div>
+          </div>
+          <div class="pin-body">
+            <div class="pin-mock-title" id="mock-pin-title">Your High-Converting Product Title</div>
+            <div class="pin-mock-desc" id="mock-pin-desc">Your product description and trending hashtags will display here in the user's Pinterest feed.</div>
+            <div class="pin-author">
+              <div class="author-circle">P</div>
+              <div>
+                <div class="author-meta">PinPilot Store</div>
+                <div style="font-size: 0.68rem; color: #71717a;" id="mock-board-tag">Board: Digital Downloads</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gumroad Store Preview -->
+      <div class="mockup-wrapper">
+        <div class="mockup-heading">Gumroad Checkout Card</div>
+        <div class="gumroad-card-preview">
+          <span class="gum-price-pill" id="mock-gum-price">$9.00</span>
+          <div class="gum-mock-title" id="mock-gum-title">Ultimate 2026 Monthly Budget Tracker</div>
+          <div class="gum-mock-desc" id="mock-gum-desc">A comprehensive financial tracker for 2026.</div>
+          <div class="gum-cta" id="mock-gum-cta">I want this! ($9.00)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================
+         VIEW 3: PUBLISHED ARCHIVE
+         ======================================================== -->
+    <div class="archive-view" id="view-archive-container">
+      <div id="archive-list">
+        <!-- Rendered via JavaScript -->
+      </div>
+    </div>
+
+  </main>
 
   <script src="/static/app.js"></script>
 </body>
