@@ -5,6 +5,9 @@
   ],
   "routes": [
     { "src": "/", "dest": "/static/index.html" },
+    { "src": "/about", "dest": "/static/about.html" },
+    { "src": "/contact", "dest": "/static/contact.html" },
+    { "src": "/cookie-policy", "dest": "/static/cookie-policy.html" },
     { "src": "/static/(.*)", "dest": "/static/$1" }
   ]
 }
