@@ -1,222 +1,24 @@
-﻿<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PinPilot - Automated Pinterest & Gumroad Pipeline</title>
-  <meta name="description" content="Automated Pinterest to Gumroad Digital Product Pipeline.">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pinrin AI Operator</title><meta name="description" content="Autonomous digital product operating system."><link rel="icon" type="image/png" href="/static/pinrin-logo.png">
   <link rel="stylesheet" href="/static/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📌</text></svg>">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
-
-  <!-- Top Navigation Bar -->
-  <header class="top-nav">
-    <div class="nav-container">
-      <div class="brand">
-        <span class="brand-dot"></span>
-        <span class="brand-name">PinPilot</span>
-        <span class="brand-version">v1.0</span>
-      </div>
-
-      <div class="nav-status">
-        <div class="status-pill" id="pill-pinterest">
-          <span class="status-indicator indicator-amber" id="dot-pinterest"></span>
-          <span id="text-pinterest">Pinterest: Checking</span>
-        </div>
-        <div class="status-pill" id="pill-gumroad">
-          <span class="status-indicator indicator-amber" id="dot-gumroad"></span>
-          <span id="text-gumroad">Gumroad: Checking</span>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- Main Container -->
-  <main class="page-container">
-    <div class="page-hero">
-      <h1 class="hero-title">Automated Digital Product Pipeline</h1>
-      <p class="hero-desc">Store digital products, validate metadata, and automatically publish high-converting Pinterest Pins linking directly to Gumroad.</p>
-    </div>
-
-    <!-- View Switcher Tabs -->
-    <div class="view-tabs">
-      <button class="tab-btn active" id="tab-pipeline">Pipeline Flow</button>
-      <button class="tab-btn" id="tab-mockup">Live Mockup</button>
-      <button class="tab-btn" id="tab-archive">Published Archive</button>
-    </div>
-
-    <!-- ========================================================
-         VIEW 1: THE EXACT 3-BOX PIPELINE FLOW
-         ======================================================== -->
-    <div id="view-pipeline-container">
-      <form id="pipeline-form">
-        <div class="pipeline-flow">
-          
-          <!-- Box 1: Dropbox Folder / Asset Ingestion -->
-          <div class="flow-card open" id="flow-card-1">
-            <div class="flow-title">Dropbox folder</div>
-            <div class="flow-subtitle">Store exported images and product files in a ready-to-publish folder.</div>
-            
-            <div class="card-content-drawer">
-              <div class="dual-dropzone">
-                <!-- Digital Product File -->
-                <div class="drop-box" id="drop-product">
-                  <span class="drop-icon">📦</span>
-                  <div class="drop-title">Digital Product File</div>
-                  <div class="drop-desc">.zip, .pdf, .xlsx, .notion, .psd</div>
-                  <input type="file" id="input-file-product" style="display: none;" required>
-                  <div id="product-file-preview" class="file-list"></div>
-                </div>
-
-                <!-- Pinterest Creatives -->
-                <div class="drop-box" id="drop-images">
-                  <span class="drop-icon">🖼️</span>
-                  <div class="drop-title">Pinterest Creatives</div>
-                  <div class="drop-desc">1 or more pin images (2:3 vertical)</div>
-                  <input type="file" id="input-file-images" style="display: none;" multiple accept="image/*" required>
-                  <div id="images-thumb-preview" class="thumbs-row"></div>
-                </div>
-              </div>
-              <div class="input-hint" style="text-align: center;">💡 Files are ingested directly into your ready-to-publish folder</div>
-            </div>
-          </div>
-
-          <!-- Down Arrow 1 -->
-          <div class="flow-arrow">↓</div>
-
-          <!-- Box 2: Your Python App / Metadata & Validation -->
-          <div class="flow-card open" id="flow-card-2">
-            <div class="flow-title">Your Python app</div>
-            <div class="flow-subtitle">Use the Dropbox API to fetch files and metadata, validate them, and prevent duplicate posts.</div>
-
-            <div class="card-content-drawer">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="input-title">Product Title</label>
-                  <input type="text" id="input-title" placeholder="e.g. Ultimate 2026 Monthly Budget Tracker" required>
-                </div>
-                <div class="form-group">
-                  <label for="input-price">Price (USD)</label>
-                  <input type="text" id="input-price" value="9.00" placeholder="9.00" required>
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="input-board">Target Pinterest Board</label>
-                  <input type="text" id="input-board" placeholder="e.g. Budget Planners & Finance Trackers">
-                </div>
-                <div class="form-group">
-                  <label for="input-tags">SEO Keywords & Tags</label>
-                  <input type="text" id="input-tags" placeholder="budget planner, excel spreadsheet, finance">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="input-desc">Marketing Description</label>
-                <textarea id="input-desc" placeholder="Describe the transformation, features, and benefits of your digital product..."></textarea>
-              </div>
-
-              <!-- AI Hook Generator -->
-              <div class="ai-box">
-                <div class="ai-bar">
-                  <span class="ai-label">✨ AI Pinterest Hook Generator</span>
-                  <button type="button" class="btn-ai-gen" id="btn-ai-gen">Generate 3 Viral Hooks</button>
-                </div>
-                <div id="ai-chips-list">
-                  <div class="variation-chip" data-title="✨ The Ultimate Monthly Budget Tracker" data-desc="Transform your finances today with this aesthetic and intuitive digital spreadsheet! Instant download.">
-                    <div class="var-title">✨ The Ultimate Monthly Budget Tracker</div>
-                    <div class="var-desc">Transform your finances today with this aesthetic and intuitive digital spreadsheet! Instant download.</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Down Arrow 2 -->
-          <div class="flow-arrow">↓</div>
-
-          <!-- Box 3: Pinterest API -> Gumroad / Execution -->
-          <div class="flow-card open" id="flow-card-3">
-            <div class="flow-title">Pinterest API → Gumroad</div>
-            <div class="flow-subtitle">Publish Pins pointing to your real product listing and track results.</div>
-
-            <div class="card-content-drawer">
-              <button type="submit" class="btn-launch" id="btn-submit-pipeline">
-                <span>Publish to Pinterest & Gumroad 🚀</span>
-              </button>
-
-              <!-- Real-time Execution Steps Drawer -->
-              <div class="execution-log" id="execution-log" style="display: none;">
-                <div style="font-weight: 600; margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
-                  <span>Pipeline Execution Status</span>
-                  <span id="exec-status-badge">Processing...</span>
-                </div>
-                <div id="exec-steps-container"></div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </form>
-    </div>
-
-    <!-- ========================================================
-         VIEW 2: LIVE MOCKUPS (Pinterest & Gumroad Previews)
-         ======================================================== -->
-    <div class="preview-section" id="view-mockup-container">
-      <!-- Pinterest Pin Preview -->
-      <div class="mockup-wrapper">
-        <div class="mockup-heading">Pinterest Feed Card</div>
-        <div class="pin-card-preview">
-          <div class="pin-img-area">
-            <img id="mock-pin-img" src="" alt="Pin Creative" style="display: none;">
-            <div id="mock-pin-empty" style="text-align: center; color: #a1a1aa; padding: 1rem;">
-              <span style="font-size: 2rem; display: block; margin-bottom: 0.3rem;">📌</span>
-              <p style="font-size: 0.85rem; font-weight: 600;">Pin Creative</p>
-              <p style="font-size: 0.7rem;">Optimal 1000 × 1500 px</p>
-            </div>
-            <div class="pin-badge-save">Save</div>
-            <div class="pin-badge-link" id="mock-pin-link">🔗 gumroad.com/product</div>
-          </div>
-          <div class="pin-body">
-            <div class="pin-mock-title" id="mock-pin-title">Your High-Converting Product Title</div>
-            <div class="pin-mock-desc" id="mock-pin-desc">Your product description and trending hashtags will display here in the user's Pinterest feed.</div>
-            <div class="pin-author">
-              <div class="author-circle">P</div>
-              <div>
-                <div class="author-meta">PinPilot Store</div>
-                <div style="font-size: 0.68rem; color: #71717a;" id="mock-board-tag">Board: Digital Downloads</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Gumroad Store Preview -->
-      <div class="mockup-wrapper">
-        <div class="mockup-heading">Gumroad Checkout Card</div>
-        <div class="gumroad-card-preview">
-          <span class="gum-price-pill" id="mock-gum-price">$9.00</span>
-          <div class="gum-mock-title" id="mock-gum-title">Ultimate 2026 Monthly Budget Tracker</div>
-          <div class="gum-mock-desc" id="mock-gum-desc">A comprehensive financial tracker for 2026.</div>
-          <div class="gum-cta" id="mock-gum-cta">I want this! ($9.00)</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========================================================
-         VIEW 3: PUBLISHED ARCHIVE
-         ======================================================== -->
-    <div class="archive-view" id="view-archive-container">
-      <div id="archive-list">
-        <!-- Rendered via JavaScript -->
-      </div>
-    </div>
-
+  <header class="topbar"><a class="wordmark" href="#start"><img src="/static/pinrin-logo.png" alt="Pinrin AI logo"><span>PINRIN <small>AI OPERATOR</small></span></a><span class="connection"><b id="connection-dot"></b><span id="connection-text">CONNECTING</span></span><span class="phase" id="phase-count">IDLE</span></header>
+  <div class="presenter"><div class="light-orb"></div><div id="guide-canvas" aria-label="Pinrin AI operator"></div><div class="presenter-copy"><span class="live"><b></b> AUTONOMOUS SYSTEM</span><strong id="agent-name">Ready to run.</strong><span id="agent-says">The operator is waiting for a configured campaign.</span></div><div class="presenter-state"><small id="agent-state">IDLE</small><span id="agent-task">Awaiting start</span></div></div>
+  <main id="story">
+    <section class="scene scene-start" id="start"><div class="scene-content"><span class="kicker">PINRIN / AUTONOMOUS DIGITAL BUSINESS</span><h1>One goal.<br><em>Five agents.</em></h1><p>Trend Scout, Opportunity Analyst, Product Builder, Marketing Assistant, and Performance Analyst operate the campaign from configuration to optimization.</p><div class="action-row"><button class="start-button" id="run-button">Start campaign <span>↓</span></button><button class="quiet-button" id="schedule-button">Start schedule</button></div><small class="system-note" id="configuration-note">Reading server configuration...</small></div></section>
+    <section class="scene" id="run"><div class="scene-content"><span class="kicker">01 / ORCHESTRATOR</span><h2 id="run-headline">The operator is receiving the goal.</h2><p id="run-copy">Tasks are routed to specialized agents. This page is observing the run, not asking you to fill out a form.</p><div class="event-stream" id="event-stream"><span>Waiting for run</span></div><button class="continue-button hidden" id="run-retry">Run again <span>↻</span></button></div></section>
+    <section class="scene" id="research"><div class="scene-content"><span class="kicker">02 / RESEARCH AGENTS</span><h2>Demand becomes a decision.</h2><div class="agent-lines"><span id="trend-status"><b>TREND SCOUT</b> waiting</span><span id="opportunity-status"><b>OPPORTUNITY ANALYST</b> waiting</span></div><p class="truth">Evidence links, trend observations, scores, and uncertainty are shown only when the configured source returns them.</p></div></section>
+    <section class="scene" id="product"><div class="scene-content"><span class="kicker">03 / PRODUCT AND CREATIVE</span><h2>The work is decomposed.</h2><div class="agent-lines"><span id="builder-status"><b>PRODUCT BUILDER</b> waiting</span><span id="marketing-status"><b>MARKETING ASSISTANT</b> waiting</span></div><p class="truth">Generated files and marketing queues are artifacts, not claims. Missing model access blocks this phase.</p></div></section>
+    <section class="scene" id="approval"><div class="scene-content"><span class="kicker">04 / HUMAN GATE</span><h2 id="approval-headline">The system will pause for your approval.</h2><p id="approval-copy">No external publishing happens silently. Approve the opportunity first, then approve the final publication.</p><div class="approval-actions"><button class="continue-button hidden" id="approve-opportunity">Approve opportunity <span>→</span></button><button class="continue-button hidden" id="approve-publish">Approve publication <span>→</span></button></div></div></section>
+    <section class="scene" id="publish"><div class="scene-content"><span class="kicker">05 / COMMERCE AND DISCOVERY</span><h2>The campaign moves into the world.</h2><div class="agent-lines"><span id="commerce-status"><b>COMMERCE AGENT</b> waiting</span><span id="pin-status"><b>PINTEREST ADAPTER</b> waiting</span></div><div class="result-line" id="publication-result">Awaiting verified publication.</div></div></section>
+    <section class="scene scene-end" id="optimize"><div class="scene-content"><span class="kicker">06 / PERFORMANCE ANALYST</span><h2>Results choose the next experiment.</h2><div class="agent-lines"><span id="performance-status"><b>PERFORMANCE ANALYST</b> waiting</span></div><div class="metric-line"><span><b id="metric-products">--</b> products</span><span><b id="metric-pins">--</b> Pins</span><span><b>--</b> sales</span><span><b>--</b> impressions</span></div><p class="truth">The current tracker exposes publication records. Platform metrics appear only after authorized analytics adapters are connected.</p><button class="continue-button" id="new-run">Start another run <span>↻</span></button></div></section>
   </main>
-
-  <script src="/static/app.js"></script>
+  <script src="/static/runtime-config.js"></script><script src="/static/app.js"></script>
 </body>
 </html>

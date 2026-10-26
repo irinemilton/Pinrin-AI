@@ -118,3 +118,15 @@ python main.py validate
 
 ## License
 MIT
+
+## Frontend-only Vercel deployment
+
+The frontend is deployed as static files from `static/`. `vercel.json` rewrites `/` to `static/index.html`; no Python backend is deployed to Vercel.
+
+To connect the hosted frontend to a deployed FastAPI backend, edit `static/runtime-config.js` before deployment:
+
+```js
+window.PINRIN_API_BASE = "https://your-api.example.com";
+```
+
+Leave it as an empty string for a visual frontend-only deployment. Never put API keys in this file.

@@ -402,6 +402,18 @@ class PinterestClient:
             logger.error(f"Failed to fetch pin {pin_id}: {e}")
             return None
 
+    def get_pin_analytics(self, pin_id: str) -> dict[str, Any] | None:
+        """Fetch analytics exposed for a Pin by the authorized API token."""
+        try:
+            return self._request(
+                "GET",
+                f"/pins/{pin_id}/analytics",
+                params={"metric_types": "IMPRESSION,OUTBOUND_CLICK,SAVE"},
+            )
+        except Exception as e:
+            logger.error(f"Failed to fetch analytics for pin {pin_id}: {e}")
+            return None
+
     def delete_pin(self, pin_id: str) -> bool:
         """Delete a Pin.
 

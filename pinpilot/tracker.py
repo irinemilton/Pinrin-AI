@@ -32,6 +32,7 @@ class PublishRecord:
     board_id: str
     published_at: str = ""
     status: str = "published"
+    user_id: str = "default"
 
     def __post_init__(self):
         if not self.published_at:

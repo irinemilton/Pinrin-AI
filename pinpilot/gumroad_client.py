@@ -28,12 +28,12 @@ class GumroadClient:
     def __init__(self, config: GumroadConfig):
         self.config = config
 
-    def _request(self, method, endpoint, data=None, files=None):
+    def _request(self, method, endpoint, data=None, files=None, params=None):
         url = f"{self.BASE_URL}{endpoint}"
         if data is None:
             data = {}
         data["access_token"] = self.config.access_token
-        response = requests.request(method=method, url=url, data=data, files=files, timeout=60)
+        response = requests.request(method=method, url=url, data=data, files=files, params=params, timeout=60)
         if not response.ok:
             response.raise_for_status()
         result = response.json()
@@ -67,6 +67,11 @@ class GumroadClient:
     def list_products(self):
         result = self._request("GET", "/products")
         return [GumroadProduct(p) for p in result.get("products", [])]
+
+    def list_sales(self):
+        """Return verified Gumroad sales exposed to the authorized token."""
+        result = self._request("GET", "/sales", data={})
+        return result.get("sales", [])
 
     @staticmethod
     def _ct(path):

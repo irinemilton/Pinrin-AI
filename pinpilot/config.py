@@ -69,6 +69,23 @@ class LogConfig:
 
 
 @dataclass
+class AgentConfig:
+    """Configuration for the autonomous campaign workflow."""
+    campaign_goal: str = ""
+    product_file: str = ""
+    pin_images: list[str] = field(default_factory=list)
+    board_name: str = ""
+    product_title: str = ""
+    price: int = 0
+    model: str = "gpt-4.1-mini"
+    huggingface_token: str = ""
+    trends_json: str = ""
+    trends_url: str = ""
+    schedule_interval_hours: int = 24
+    max_retries: int = 2
+
+
+@dataclass
 class Config:
     """Master configuration for PinPilot."""
     dropbox: DropboxConfig = field(default_factory=DropboxConfig)
@@ -76,6 +93,7 @@ class Config:
     gumroad: GumroadConfig = field(default_factory=GumroadConfig)
     publishing: PublishingConfig = field(default_factory=PublishingConfig)
     logging: LogConfig = field(default_factory=LogConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
 
     @classmethod
     def from_env(cls, env_path: str | Path | None = None) -> "Config":
@@ -93,6 +111,14 @@ class Config:
         else:
             load_dotenv()
 
+        huggingface_token = os.getenv("HUGGINGFACE_API_TOKEN", os.getenv("HF_TOKEN", ""))
+        if not huggingface_token:
+            dotenv_path = Path(env_path) if env_path else Path(".env")
+            if dotenv_path.exists():
+                for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+                    candidate = line.strip()
+                    if candidate.startswith("hf_"):
+                        huggingface_token = candidate
         return cls(
             dropbox=DropboxConfig(
                 app_key=os.getenv("DROPBOX_APP_KEY", ""),
@@ -119,6 +145,20 @@ class Config:
                 level=os.getenv("LOG_LEVEL", "INFO"),
                 log_file=os.getenv("LOG_FILE", "pinpilot.log"),
             ),
+            agent=AgentConfig(
+                campaign_goal=os.getenv("AGENT_CAMPAIGN_GOAL", ""),
+                product_file=os.getenv("AGENT_PRODUCT_FILE", ""),
+                pin_images=[p.strip() for p in os.getenv("AGENT_PIN_IMAGES", "").split(",") if p.strip()],
+                board_name=os.getenv("AGENT_BOARD_NAME", ""),
+                product_title=os.getenv("AGENT_PRODUCT_TITLE", ""),
+                price=int(os.getenv("AGENT_PRICE", "0")),
+                model=os.getenv("HUGGINGFACE_TEXT_MODEL", "Qwen/Qwen2.5-72B-Instruct"),
+                huggingface_token=huggingface_token,
+                trends_json=os.getenv("PINTEREST_TRENDS_JSON", ""),
+                trends_url=os.getenv("PINTEREST_TRENDS_URL", ""),
+                schedule_interval_hours=int(os.getenv("AGENT_SCHEDULE_INTERVAL_HOURS", "24")),
+                max_retries=int(os.getenv("AGENT_MAX_RETRIES", "2")),
+            ),
         )
 
     def validate(self) -> list[str]:
@@ -143,5 +183,16 @@ class Config:
 
         if self.pinterest.sandbox:
             issues.append("ℹ️  Pinterest sandbox mode is ON — Pins won't be publicly visible")
+
+        if not self.agent.campaign_goal:
+            issues.append("⚠️  AGENT_CAMPAIGN_GOAL not set — autonomous runs need a configured goal")
+        if not self.agent.huggingface_token:
+            issues.append("⚠️  HUGGINGFACE_API_TOKEN not set — model-backed agents cannot run")
+        if not self.agent.product_file:
+            issues.append("⚠️  AGENT_PRODUCT_FILE not set — publishing needs a product artifact")
+        if not self.agent.pin_images:
+            issues.append("⚠️  AGENT_PIN_IMAGES not set — Pinterest publishing needs creatives")
+        if self.agent.price <= 0:
+            issues.append("⚠️  AGENT_PRICE must be greater than zero for Gumroad publication")
 
         return issues

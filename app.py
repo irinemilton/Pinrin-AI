@@ -21,6 +21,8 @@ from pinpilot.config import Config
 from pinpilot.gumroad_client import GumroadClient
 from pinpilot.pinterest_client import PinterestClient
 from pinpilot.tracker import PublishTracker, PublishRecord
+from pinpilot.orchestrator import Orchestrator
+from pinpilot.agents import HuggingFaceAdapter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pinpilot.webapp")
@@ -36,6 +38,21 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 config = Config.from_env()
 tracker = PublishTracker()
+orchestrator = Orchestrator(config=config, store=None)
+PINRIN_API_KEY = os.getenv("PINRIN_API_KEY", "")
+
+
+@app.on_event("startup")
+async def resume_persistent_schedule() -> None:
+    if orchestrator.store.get_schedule(config.agent.schedule_interval_hours)["running"]:
+        orchestrator.start_schedule()
+
+
+def current_user(request: Request) -> str:
+    """Resolve an authenticated user when API protection is configured."""
+    if PINRIN_API_KEY and request.headers.get("x-pinrin-api-key") != PINRIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Missing or invalid Pinrin API key")
+    return request.headers.get("x-pinrin-user", "default")[:120]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -54,12 +71,71 @@ async def api_status():
         "publishing": summary,
         "gumroad_configured": config.gumroad.is_configured,
         "pinterest_configured": config.pinterest.is_configured,
+        "agent": {
+            "campaign_configured": bool(config.agent.campaign_goal),
+            "huggingface_configured": bool(config.agent.huggingface_token),
+            "schedule": orchestrator.schedule_status(),
+            "auth_required": bool(PINRIN_API_KEY),
+        },
     }
 
 
+@app.post("/api/agent/run")
+async def start_agent_run(request: Request):
+    """Start an autonomous run using server configuration only."""
+    return orchestrator.start(current_user(request))
+
+
+@app.get("/api/agent/runs/{run_id}")
+async def get_agent_run(run_id: str, request: Request):
+    run = orchestrator.store.get(run_id, current_user(request))
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run
+
+
+@app.post("/api/agent/runs/{run_id}/approve-opportunity")
+async def approve_agent_opportunity(run_id: str, request: Request):
+    run = orchestrator.approve_opportunity(run_id, current_user(request))
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run
+
+
+@app.post("/api/agent/runs/{run_id}/approve-publish")
+async def approve_agent_publish(run_id: str, request: Request):
+    run = orchestrator.approve_publish(run_id, current_user(request))
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run
+
+
+@app.post("/api/agent/schedule/start")
+async def start_agent_schedule(request: Request):
+    current_user(request)
+    return orchestrator.start_schedule()
+
+
+@app.post("/api/agent/schedule/stop")
+async def stop_agent_schedule(request: Request):
+    current_user(request)
+    return orchestrator.stop_schedule()
+
+
+@app.get("/api/agent/schedule")
+async def get_agent_schedule():
+    return orchestrator.schedule_status()
+
+
+@app.get("/api/agent/providers")
+async def verify_agent_providers():
+    return {"reasoning": HuggingFaceAdapter(config).health(), "image_generation": {"status": "external_provider_not_configured"}}
+
+
 @app.get("/api/products")
-async def list_products():
-    records = tracker.data.records
+async def list_products(request: Request):
+    user_id = current_user(request)
+    records = [record for record in tracker.data.records if record.user_id == user_id]
     products = {}
     for r in records:
         if r.product_name not in products:
@@ -121,6 +197,7 @@ async def generate_variations(payload: dict):
 
 @app.post("/api/upload")
 async def upload_product(
+    request: Request,
     product_file: UploadFile = File(...),
     pin_images: list[UploadFile] = File(...),
     title: str = Form(...),
@@ -136,6 +213,7 @@ async def upload_product(
     3. Publish Pinterest Pins
     4. Track everything
     """
+    user_id = current_user(request)
     product_id = str(uuid.uuid4())[:8]
     product_dir = UPLOAD_DIR / product_id
     product_dir.mkdir(parents=True, exist_ok=True)
@@ -244,9 +322,10 @@ async def upload_product(
                             pin_url=result.pin_url or "",
                             pin_title=pin_title,
                             gumroad_url=gumroad_url or "",
-                            image_path=img_path,
-                            board_id=board_id,
-                            published_at=datetime.now(timezone.utc).isoformat(),
+                        image_path=img_path,
+                        board_id=board_id,
+                        published_at=datetime.now(timezone.utc).isoformat(),
+                        user_id=user_id,
                         )
                         tracker.record(record)
                         results["steps"].append({"step": f"Pin published: {pin_title[:40]}...", "status": "success", "pin_url": result.pin_url})

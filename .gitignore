@@ -15,6 +15,11 @@ venv/
 pinpilot_tracker.json
 pinpilot_export.csv
 pinpilot.log
+agent_runs.json
+pinpilot.sqlite3
+pinpilot.sqlite3-shm
+pinpilot.sqlite3-wal
+artifacts/
 
 # IDE
 .idea/
