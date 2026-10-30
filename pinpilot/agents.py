@@ -99,6 +99,10 @@ class AgentSuite:
         self.emit = emit
         self.llm = HuggingFaceAdapter(config)
 
+    def _trend_context(self, trends: dict[str, Any]) -> str:
+        observations = trends.get("observations", []) if isinstance(trends, dict) else []
+        return json.dumps(observations[:20], ensure_ascii=True)
+
     def run_trend_scout(self, goal: str) -> dict[str, Any]:
         self.emit("trend_scout", "started", "Collecting permitted trend observations.", None)
         observations: list[dict[str, Any]] = []
@@ -126,7 +130,14 @@ class AgentSuite:
 
     def run_opportunity_analyst(self, goal: str, trends: dict[str, Any]) -> dict[str, Any]:
         self.emit("opportunity_analyst", "started", "Scoring ideas against explicit criteria.", None)
-        prompt = f"""You are the Opportunity Analyst. Return JSON only with an ideas array.\nGoal: {goal}\nPermitted trend observations: {json.dumps(trends)}\nEach idea must have name, audience, problem, scores (relevance, demand, differentiation, effort, commercial_risk), reasons, and uncertainty. Scores are prioritization aids, never sales predictions. Do not claim evidence that is absent."""
+        prompt = f"""You are the Opportunity Analyst for an autonomous digital-product studio.
+Return JSON only with an ideas array. Produce 3 genuinely different opportunities, each with a distinct audience, problem, product angle, and creative theme.
+Goal: {goal}
+Trend evidence available right now: {self._trend_context(trends)}
+Creative direction: {self.config.agent.creative_direction}
+Additional role instructions: {self.config.agent.opportunity_instructions}
+For each idea include: name, audience, problem, promise, theme, differentiation, visual_concept, trend_evidence, scores (relevance, demand, differentiation, effort, commercial_risk), reasons, and uncertainty.
+Use trend keywords as directional signals, not proof of demand. Prefer surprising combinations and underserved use cases. Never copy a trend title into a product name without adding a differentiated angle. Scores are prioritization aids, never sales predictions. Do not claim evidence that is absent."""
         if self.llm.configured:
             result = self.llm.generate_json(prompt, "opportunity_analysis", "opportunity")
         else:
@@ -143,27 +154,40 @@ class AgentSuite:
         elif not self.llm.configured:
             raise AgentBlocked("Product generation requires configured model credentials or AGENT_PRODUCT_FILE")
         else:
-            result = self.llm.generate_json(f"You are the Product Builder. Return editable product metadata and an outline. Goal: {goal}. Selected opportunity: {json.dumps(opportunity)}. Do not claim a file was rendered.", "product_blueprint", "product")
+            result = self.llm.generate_json(f"""You are the Product Builder.
+Return JSON only with editable product metadata and an outline.
+Goal: {goal}
+Selected opportunity: {json.dumps(opportunity, ensure_ascii=True)}
+Creative direction: {self.config.agent.creative_direction}
+Additional role instructions: {self.config.agent.product_instructions}
+Design a product that is useful without relying on invented statistics. Include title, promise, audience, theme, differentiator, outline, exercises, deliverables, and validation_questions. Make the structure specific enough to render later. Do not claim a file was rendered.""", "product_blueprint", "product")
             result["status"] = "planned"
         self.emit("product_builder", "completed", "Product plan is ready for validation.", result)
         return result
 
-    def run_marketing_assistant(self, goal: str, product: dict[str, Any]) -> dict[str, Any]:
+    def run_marketing_assistant(self, goal: str, product: dict[str, Any], trends: dict[str, Any] | None = None) -> dict[str, Any]:
         self.emit("marketing_assistant", "started", "Preparing an approval-ready marketing queue.", None)
         if not self.llm.configured:
             raise AgentBlocked("Marketing copy requires configured model credentials")
-        result = self.llm.generate_json(f"You are the Marketing Assistant. Return a weekly queue with Pin headline variations, keyword-aware descriptions, visual briefs, and campaign links. Goal: {goal}. Product plan: {json.dumps(product)}. Do not invent product features.", "marketing_queue", "marketing")
+        result = self.llm.generate_json(f"""You are the Marketing Assistant and creative director.
+Return JSON only with a queue array containing 4 distinct Pinterest concepts.
+Goal: {goal}
+Product plan: {json.dumps(product, ensure_ascii=True)}
+Current trend evidence: {self._trend_context(trends or {})}
+Creative direction: {self.config.agent.creative_direction}
+Additional role instructions: {self.config.agent.marketing_instructions}
+Each concept must include: theme, hook, headline, description, keywords, visual_brief, audience_angle, cta, trend_used, and uncertainty. Make the four concepts visually and emotionally different: do not repeat the same palette, composition, promise, or hook. Use keywords naturally, never stuff them. Do not invent product features, testimonials, rankings, or guaranteed outcomes.""", "marketing_queue", "marketing")
         result["status"] = "draft"
         self.emit("marketing_assistant", "completed", "Marketing queue is awaiting approval.", result)
         return result
 
-    def run_image_generation(self, goal: str, product: dict[str, Any], marketing: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+    def run_image_generation(self, goal: str, product: dict[str, Any], marketing: dict[str, Any], output_dir: Path, trends: dict[str, Any] | None = None) -> dict[str, Any]:
         self.emit("image_generator", "started", "Generating an approval-ready Pinterest creative.", None)
         visual_brief = ""
         queue = marketing.get("queue", []) if isinstance(marketing, dict) else []
         if queue and isinstance(queue[0], dict):
             visual_brief = queue[0].get("visual_brief", "") or queue[0].get("visual brief", "")
-        prompt = f"Pinterest product poster background. Product: {product.get('title', self.config.agent.product_title or 'digital product')}. Goal: {goal}. Visual direction: {visual_brief}. Editorial, polished, high contrast, leave clear space for exact text overlay, no words or lettering in the generated image."
+        prompt = f"{self.config.agent.image_instructions} Pinterest product poster background. Product: {product.get('title', self.config.agent.product_title or 'digital product')}. Goal: {goal}. Visual direction: {visual_brief}. Trend signal to reinterpret, not copy: {self._trend_context(trends or {})}. Make the image original, editorial, polished, high contrast, and leave clear space for exact text overlay. No words, logos, watermarks, or lettering in the generated image."
         output = GradioMCPImageProvider(self.config.agent.image_provider_url, self.config.agent.huggingface_token).generate(prompt, output_dir / "pinrin_generated_pin.png", self.config.agent.image_aspect_ratio, self.config.agent.image_steps)
         result = {"status": "generated", "images": [output], "prompt": prompt}
         self.emit("image_generator", "completed", "Pinterest creative generated and ready for QA.", result)

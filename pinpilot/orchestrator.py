@@ -218,6 +218,7 @@ class Orchestrator:
         suite = AgentSuite(self.config, self.tracker, lambda agent, status, summary, data: self._emit(run_id, agent, status, summary, data))
         try:
             opportunity = run["artifacts"].get("opportunities", {})
+            trends = run["artifacts"].get("trends", {})
             product = self._retry(run_id, "product_builder", lambda: suite.run_product_builder(run["goal"], opportunity))
             product_dir = Path("artifacts") / run_id
             if product.get("status") == "source_supplied":
@@ -227,13 +228,13 @@ class Orchestrator:
                 product = {**product, **render_product_files(product_dir, title, run["goal"], product)}
             product["qa"] = validate_product_files(product.get("files", []), self.config.agent.pin_images)
             if not self.config.agent.pin_images:
-                marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product))
-                generated = self._retry(run_id, "image_generator", lambda: suite.run_image_generation(run["goal"], product, marketing, product_dir))
+                marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product, trends))
+                generated = self._retry(run_id, "image_generator", lambda: suite.run_image_generation(run["goal"], product, marketing, product_dir, trends))
                 generated_images = [item["path"] for item in generated["images"]]
                 product["qa"] = validate_product_files(product.get("files", []), generated_images)
                 product["generated_images"] = generated_images
             else:
-                marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product))
+                marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product, trends))
             if product["qa"]["status"] != "passed":
                 raise AgentBlocked("Product quality checks failed; review the generated files before publishing")
             product["checksums"] = [self.store.record_artifact(run_id, Path(item["path"]), item["kind"]) for item in product.get("files", [])]
