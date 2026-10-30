@@ -81,6 +81,9 @@ class AgentConfig:
     huggingface_token: str = ""
     trends_json: str = ""
     trends_url: str = ""
+    trends_region: str = "US"
+    trends_type: str = "growing"
+    trends_limit: int = 50
     schedule_interval_hours: int = 24
     max_retries: int = 2
 
@@ -156,6 +159,9 @@ class Config:
                 huggingface_token=huggingface_token,
                 trends_json=os.getenv("PINTEREST_TRENDS_JSON", ""),
                 trends_url=os.getenv("PINTEREST_TRENDS_URL", ""),
+                trends_region=os.getenv("PINTEREST_TRENDS_REGION", "US"),
+                trends_type=os.getenv("PINTEREST_TRENDS_TYPE", "growing"),
+                trends_limit=int(os.getenv("PINTEREST_TRENDS_LIMIT", "50")),
                 schedule_interval_hours=int(os.getenv("AGENT_SCHEDULE_INTERVAL_HOURS", "24")),
                 max_retries=int(os.getenv("AGENT_MAX_RETRIES", "2")),
             ),

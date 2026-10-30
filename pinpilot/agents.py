@@ -95,13 +95,15 @@ class AgentSuite:
                 observations = parsed if isinstance(parsed, list) else parsed.get("observations", [])
             except json.JSONDecodeError as exc:
                 raise AgentBlocked(f"PINTEREST_TRENDS_JSON is invalid: {exc}") from exc
-        elif self.config.agent.trends_url and self.config.pinterest.access_token:
-            response = requests.get(self.config.agent.trends_url, headers={"Authorization": f"Bearer {self.config.pinterest.access_token}"}, timeout=30)
+        elif self.config.pinterest.access_token:
+            trends_url = self.config.agent.trends_url or f"{self.config.pinterest.base_url}/trends/keywords/{self.config.agent.trends_region}/top/{self.config.agent.trends_type}"
+            response = requests.get(trends_url, headers={"Authorization": f"Bearer {self.config.pinterest.access_token}"}, params={"limit": self.config.agent.trends_limit}, timeout=30)
             if response.status_code in (401, 403):
                 raise AgentBlocked(f"Pinterest Trends authentication failed ({response.status_code})")
             response.raise_for_status()
             payload = response.json()
-            observations = payload if isinstance(payload, list) else payload.get("items", payload.get("trends", []))
+            raw_trends = payload if isinstance(payload, list) else payload.get("items", payload.get("trends", []))
+            observations = [{"keyword": item.get("keyword", ""), "growth_wow": item.get("pct_growth_wow"), "growth_mom": item.get("pct_growth_mom"), "growth_yoy": item.get("pct_growth_yoy"), "time_series": item.get("time_series", {}), "region": self.config.agent.trends_region, "trend_type": self.config.agent.trends_type, "url": trends_url} for item in raw_trends]
         if not observations:
             self.emit("trend_scout", "blocked", "No permitted Pinterest Trends source is configured.", {"evidence": []})
             return {"status": "unavailable", "observations": [], "evidence": []}
