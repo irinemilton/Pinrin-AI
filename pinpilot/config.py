@@ -81,6 +81,7 @@ class AgentConfig:
     provider: str = "huggingface"
     novita_token: str = ""
     novita_base_url: str = "https://api.novita.ai/v3/openai"
+    novita_model: str = "deepseek/deepseek-v4.1-flash-1017"
     trend_model: str = ""
     opportunity_model: str = ""
     product_model: str = ""
@@ -168,6 +169,7 @@ class Config:
                 provider=os.getenv("AGENT_LLM_PROVIDER", "huggingface").lower(),
                 novita_token=os.getenv("NOVITA_API_KEY", ""),
                 novita_base_url=os.getenv("NOVITA_BASE_URL", "https://api.novita.ai/v3/openai").rstrip("/"),
+                novita_model=os.getenv("NOVITA_TEXT_MODEL", "deepseek/deepseek-v4.1-flash-1017"),
                 trend_model=os.getenv("AGENT_TREND_MODEL", ""),
                 opportunity_model=os.getenv("AGENT_OPPORTUNITY_MODEL", ""),
                 product_model=os.getenv("AGENT_PRODUCT_MODEL", ""),

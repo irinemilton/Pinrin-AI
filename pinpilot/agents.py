@@ -40,7 +40,7 @@ class HuggingFaceAdapter:
 
     def model_for(self, role: str = "") -> str:
         role_model = getattr(self.config.agent, f"{role}_model", "") if role else ""
-        return role_model or self.config.agent.model
+        return role_model or (self.config.agent.novita_model if self.provider == "novita" else self.config.agent.model)
 
     def _label(self) -> str:
         return self.provider
@@ -55,7 +55,8 @@ class HuggingFaceAdapter:
                 json={"model": self.model_for(), "messages": [{"role": "user", "content": "Reply OK"}], "max_tokens": 4},
                 timeout=30,
             )
-            return {"provider": self.provider, "status": "ready" if response.ok else "unavailable", "http_status": response.status_code, "model": self.model_for()}
+            details = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+            return {"provider": self.provider, "status": "ready" if response.ok else "unavailable", "http_status": response.status_code, "model": self.model_for(), "error": details.get("message") if details else None}
         except requests.RequestException as exc:
             return {"provider": self.provider, "status": "unavailable", "model": self.model_for(), "error": str(exc)}
 
@@ -73,6 +74,8 @@ class HuggingFaceAdapter:
             },
             timeout=90,
         )
+        if response.status_code == 403 and "NOT_ENOUGH_BALANCE" in response.text:
+            raise AgentBlocked(f"{self._label()} account has insufficient balance")
         if response.status_code in (401, 403):
             raise AgentBlocked(f"{self._label()} authentication failed ({response.status_code})")
         if response.status_code == 402:
