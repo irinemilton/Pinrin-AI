@@ -26,38 +26,47 @@ class AgentBlocked(RuntimeError):
 
 
 class HuggingFaceAdapter:
-    """Server-only adapter for Hugging Face's OpenAI-compatible router."""
+    """Server-only adapter for configured OpenAI-compatible reasoning providers."""
 
     def __init__(self, config: Config):
         self.config = config
-        self.api_key = config.agent.huggingface_token
+        self.provider = config.agent.provider
+        self.api_key = config.agent.novita_token if self.provider == "novita" else config.agent.huggingface_token
+        self.base_url = config.agent.novita_base_url if self.provider == "novita" else "https://router.huggingface.co/v1"
 
     @property
     def configured(self) -> bool:
         return bool(self.api_key)
 
+    def model_for(self, role: str = "") -> str:
+        role_model = getattr(self.config.agent, f"{role}_model", "") if role else ""
+        return role_model or self.config.agent.model
+
+    def _label(self) -> str:
+        return self.provider
+
     def health(self) -> dict[str, Any]:
         if not self.configured:
-            return {"provider": "huggingface", "status": "not_configured", "model": self.config.agent.model}
+            return {"provider": self.provider, "status": "not_configured", "model": self.model_for()}
         try:
             response = requests.post(
-                "https://router.huggingface.co/v1/chat/completions",
+                f"{self.base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                json={"model": self.config.agent.model, "messages": [{"role": "user", "content": "Reply OK"}], "max_tokens": 4},
+                json={"model": self.model_for(), "messages": [{"role": "user", "content": "Reply OK"}], "max_tokens": 4},
                 timeout=30,
             )
-            return {"provider": "huggingface", "status": "ready" if response.ok else "unavailable", "http_status": response.status_code, "model": self.config.agent.model}
+            return {"provider": self.provider, "status": "ready" if response.ok else "unavailable", "http_status": response.status_code, "model": self.model_for()}
         except requests.RequestException as exc:
-            return {"provider": "huggingface", "status": "unavailable", "model": self.config.agent.model, "error": str(exc)}
+            return {"provider": self.provider, "status": "unavailable", "model": self.model_for(), "error": str(exc)}
 
-    def generate_json(self, instruction: str, schema_name: str) -> dict[str, Any]:
+    def generate_json(self, instruction: str, schema_name: str, role: str = "") -> dict[str, Any]:
         if not self.configured:
-            raise AgentBlocked("HUGGINGFACE_API_TOKEN is not configured")
+            raise AgentBlocked(f"{self.provider} API credentials are not configured")
         response = requests.post(
-            "https://router.huggingface.co/v1/chat/completions",
+            f"{self.base_url}/chat/completions",
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
             json={
-                "model": self.config.agent.model,
+                "model": self.model_for(role),
                 "messages": [{"role": "system", "content": "Return only valid JSON. Do not reveal hidden reasoning."}, {"role": "user", "content": instruction}],
                 "max_tokens": 1800,
                 "temperature": 0.2,
@@ -65,16 +74,16 @@ class HuggingFaceAdapter:
             timeout=90,
         )
         if response.status_code in (401, 403):
-            raise AgentBlocked(f"Hugging Face authentication failed ({response.status_code})")
+            raise AgentBlocked(f"{self._label()} authentication failed ({response.status_code})")
         if response.status_code == 402:
-            raise AgentBlocked("Hugging Face inference requires provider credits or billing")
+            raise AgentBlocked(f"{self._label()} inference requires provider credits or billing")
         response.raise_for_status()
         payload = response.json()
         text = payload.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
             return json.loads(text)
         except (TypeError, json.JSONDecodeError) as exc:
-            raise AgentBlocked("Hugging Face returned no valid structured JSON") from exc
+            raise AgentBlocked(f"{self._label()} returned no valid structured JSON") from exc
 
 
 class AgentSuite:
@@ -115,7 +124,7 @@ class AgentSuite:
         self.emit("opportunity_analyst", "started", "Scoring ideas against explicit criteria.", None)
         prompt = f"""You are the Opportunity Analyst. Return JSON only with an ideas array.\nGoal: {goal}\nPermitted trend observations: {json.dumps(trends)}\nEach idea must have name, audience, problem, scores (relevance, demand, differentiation, effort, commercial_risk), reasons, and uncertainty. Scores are prioritization aids, never sales predictions. Do not claim evidence that is absent."""
         if self.llm.configured:
-            result = self.llm.generate_json(prompt, "opportunity_analysis")
+            result = self.llm.generate_json(prompt, "opportunity_analysis", "opportunity")
         else:
             result = {"ideas": [{"name": "Configured goal hypothesis", "audience": "From campaign goal", "problem": goal, "scores": {}, "reasons": ["Derived from configured goal only"], "uncertainty": ["No trend source or model is available"]}]}
         result["status"] = "complete" if trends.get("status") == "complete" or self.llm.configured else "hypothesis"
@@ -128,9 +137,9 @@ class AgentSuite:
         if product_path and product_path.exists():
             result = {"status": "source_supplied", "file": str(product_path), "outline": [], "message": "Using the configured product artifact."}
         elif not self.llm.configured:
-            raise AgentBlocked("Product generation requires a valid HUGGINGFACE_API_TOKEN or AGENT_PRODUCT_FILE")
+            raise AgentBlocked("Product generation requires configured model credentials or AGENT_PRODUCT_FILE")
         else:
-            result = self.llm.generate_json(f"You are the Product Builder. Return editable product metadata and an outline. Goal: {goal}. Selected opportunity: {json.dumps(opportunity)}. Do not claim a file was rendered.", "product_blueprint")
+            result = self.llm.generate_json(f"You are the Product Builder. Return editable product metadata and an outline. Goal: {goal}. Selected opportunity: {json.dumps(opportunity)}. Do not claim a file was rendered.", "product_blueprint", "product")
             result["status"] = "planned"
         self.emit("product_builder", "completed", "Product plan is ready for validation.", result)
         return result
@@ -138,8 +147,8 @@ class AgentSuite:
     def run_marketing_assistant(self, goal: str, product: dict[str, Any]) -> dict[str, Any]:
         self.emit("marketing_assistant", "started", "Preparing an approval-ready marketing queue.", None)
         if not self.llm.configured:
-            raise AgentBlocked("Marketing copy requires a valid HUGGINGFACE_API_TOKEN")
-        result = self.llm.generate_json(f"You are the Marketing Assistant. Return a weekly queue with Pin headline variations, keyword-aware descriptions, visual briefs, and campaign links. Goal: {goal}. Product plan: {json.dumps(product)}. Do not invent product features.", "marketing_queue")
+            raise AgentBlocked("Marketing copy requires configured model credentials")
+        result = self.llm.generate_json(f"You are the Marketing Assistant. Return a weekly queue with Pin headline variations, keyword-aware descriptions, visual briefs, and campaign links. Goal: {goal}. Product plan: {json.dumps(product)}. Do not invent product features.", "marketing_queue", "marketing")
         result["status"] = "draft"
         self.emit("marketing_assistant", "completed", "Marketing queue is awaiting approval.", result)
         return result

@@ -78,6 +78,14 @@ class AgentConfig:
     product_title: str = ""
     price: int = 0
     model: str = "gpt-4.1-mini"
+    provider: str = "huggingface"
+    novita_token: str = ""
+    novita_base_url: str = "https://api.novita.ai/v3/openai"
+    trend_model: str = ""
+    opportunity_model: str = ""
+    product_model: str = ""
+    marketing_model: str = ""
+    performance_model: str = ""
     huggingface_token: str = ""
     trends_json: str = ""
     trends_url: str = ""
@@ -157,6 +165,14 @@ class Config:
                 price=int(os.getenv("AGENT_PRICE", "0")),
                 model=os.getenv("HUGGINGFACE_TEXT_MODEL", "Qwen/Qwen2.5-72B-Instruct"),
                 huggingface_token=huggingface_token,
+                provider=os.getenv("AGENT_LLM_PROVIDER", "huggingface").lower(),
+                novita_token=os.getenv("NOVITA_API_KEY", ""),
+                novita_base_url=os.getenv("NOVITA_BASE_URL", "https://api.novita.ai/v3/openai").rstrip("/"),
+                trend_model=os.getenv("AGENT_TREND_MODEL", ""),
+                opportunity_model=os.getenv("AGENT_OPPORTUNITY_MODEL", ""),
+                product_model=os.getenv("AGENT_PRODUCT_MODEL", ""),
+                marketing_model=os.getenv("AGENT_MARKETING_MODEL", ""),
+                performance_model=os.getenv("AGENT_PERFORMANCE_MODEL", ""),
                 trends_json=os.getenv("PINTEREST_TRENDS_JSON", ""),
                 trends_url=os.getenv("PINTEREST_TRENDS_URL", ""),
                 trends_region=os.getenv("PINTEREST_TRENDS_REGION", "US"),
@@ -192,7 +208,9 @@ class Config:
 
         if not self.agent.campaign_goal:
             issues.append("⚠️  AGENT_CAMPAIGN_GOAL not set — autonomous runs need a configured goal")
-        if not self.agent.huggingface_token:
+        if self.agent.provider == "novita" and not self.agent.novita_token:
+            issues.append("⚠️  NOVITA_API_KEY not set — model-backed agents cannot run")
+        elif self.agent.provider != "novita" and not self.agent.huggingface_token:
             issues.append("⚠️  HUGGINGFACE_API_TOKEN not set — model-backed agents cannot run")
         if not self.agent.product_file:
             issues.append("⚠️  AGENT_PRODUCT_FILE not set — publishing needs a product artifact")
