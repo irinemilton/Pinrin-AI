@@ -227,13 +227,18 @@ class Orchestrator:
                 product = {**product, **render_product_files(product_dir, title, run["goal"], product)}
             product["qa"] = validate_product_files(product.get("files", []), self.config.agent.pin_images)
             if not self.config.agent.pin_images:
-                product["qa"]["status"] = "failed"
-                product["qa"]["error"] = "AGENT_PIN_IMAGES is required for the Pinterest campaign"
+                marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product))
+                generated = self._retry(run_id, "image_generator", lambda: suite.run_image_generation(run["goal"], product, marketing, product_dir))
+                generated_images = [item["path"] for item in generated["images"]]
+                product["qa"] = validate_product_files(product.get("files", []), generated_images)
+                product["generated_images"] = generated_images
+            else:
+                marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product))
             if product["qa"]["status"] != "passed":
                 raise AgentBlocked("Product quality checks failed; review the generated files before publishing")
             product["checksums"] = [self.store.record_artifact(run_id, Path(item["path"]), item["kind"]) for item in product.get("files", [])]
-            marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product))
-            self.store.update(run_id, status="awaiting_publish_approval", approval_required=True, artifacts={**run["artifacts"], "product": product, "marketing": marketing})
+            product["checksums"].extend(self.store.record_artifact(run_id, Path(path), "generated_pin") for path in product.get("generated_images", []))
+            self.store.update(run_id, status="awaiting_publish_approval", approval_required=True, artifacts={**run["artifacts"], "product": product, "marketing": marketing, "generated_images": product.get("generated_images", [])})
         except AgentBlocked as exc:
             self._blocked(run_id, str(exc))
         except Exception as exc:
@@ -256,8 +261,10 @@ class Orchestrator:
         try:
             product_file = Path(self.config.agent.product_file)
             images = [Path(path) for path in self.config.agent.pin_images]
+            if not images:
+                images = [Path(path) for path in run.get("artifacts", {}).get("generated_images", [])]
             if not product_file.exists() or not images or not all(path.exists() for path in images):
-                raise AgentBlocked("AGENT_PRODUCT_FILE and existing AGENT_PIN_IMAGES are required for publishing")
+                raise AgentBlocked("A product file and either AGENT_PIN_IMAGES or generated campaign images are required for publishing")
             input_checksums = [self.store.record_artifact(run_id, product_file, "product_source")]
             input_checksums.extend(self.store.record_artifact(run_id, image, "pin_source") for image in images)
             self.store.update(run_id, artifacts={**run["artifacts"], "input_checksums": input_checksums})

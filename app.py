@@ -143,7 +143,7 @@ async def get_agent_schedule():
 
 @app.get("/api/agent/providers")
 async def verify_agent_providers():
-    return {"reasoning": HuggingFaceAdapter(config).health(), "image_generation": {"status": "external_provider_not_configured"}}
+    return {"reasoning": HuggingFaceAdapter(config).health(), "image_generation": {"provider": "huggingface_gradio_mcp", "status": "configured" if config.agent.image_provider_url else "not_configured", "endpoint": config.agent.image_provider_url}}
 
 
 @app.get("/api/products")

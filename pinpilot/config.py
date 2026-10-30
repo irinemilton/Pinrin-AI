@@ -87,6 +87,9 @@ class AgentConfig:
     product_model: str = ""
     marketing_model: str = ""
     performance_model: str = ""
+    image_provider_url: str = "https://guaryn-qwen-image-2-1-uncensored-aio-loras.hf.space/gradio_api/mcp/"
+    image_aspect_ratio: str = "Portrait · 3:4 (864x1152)"
+    image_steps: int = 6
     huggingface_token: str = ""
     trends_json: str = ""
     trends_url: str = ""
@@ -175,6 +178,9 @@ class Config:
                 product_model=os.getenv("AGENT_PRODUCT_MODEL", ""),
                 marketing_model=os.getenv("AGENT_MARKETING_MODEL", ""),
                 performance_model=os.getenv("AGENT_PERFORMANCE_MODEL", ""),
+                image_provider_url=os.getenv("IMAGE_PROVIDER_MCP_URL", "https://guaryn-qwen-image-2-1-uncensored-aio-loras.hf.space/gradio_api/mcp/"),
+                image_aspect_ratio=os.getenv("IMAGE_ASPECT_RATIO", "Portrait · 3:4 (864x1152)"),
+                image_steps=int(os.getenv("IMAGE_STEPS", "6")),
                 trends_json=os.getenv("PINTEREST_TRENDS_JSON", ""),
                 trends_url=os.getenv("PINTEREST_TRENDS_URL", ""),
                 trends_region=os.getenv("PINTEREST_TRENDS_REGION", "US"),

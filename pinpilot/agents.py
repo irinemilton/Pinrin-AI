@@ -14,6 +14,7 @@ import requests
 
 from .config import Config
 from .gumroad_client import GumroadClient
+from .image_provider import GradioMCPImageProvider
 from .pinterest_client import PinterestClient
 from .tracker import PublishTracker
 
@@ -154,6 +155,18 @@ class AgentSuite:
         result = self.llm.generate_json(f"You are the Marketing Assistant. Return a weekly queue with Pin headline variations, keyword-aware descriptions, visual briefs, and campaign links. Goal: {goal}. Product plan: {json.dumps(product)}. Do not invent product features.", "marketing_queue", "marketing")
         result["status"] = "draft"
         self.emit("marketing_assistant", "completed", "Marketing queue is awaiting approval.", result)
+        return result
+
+    def run_image_generation(self, goal: str, product: dict[str, Any], marketing: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+        self.emit("image_generator", "started", "Generating an approval-ready Pinterest creative.", None)
+        visual_brief = ""
+        queue = marketing.get("queue", []) if isinstance(marketing, dict) else []
+        if queue and isinstance(queue[0], dict):
+            visual_brief = queue[0].get("visual_brief", "") or queue[0].get("visual brief", "")
+        prompt = f"Pinterest product poster background. Product: {product.get('title', self.config.agent.product_title or 'digital product')}. Goal: {goal}. Visual direction: {visual_brief}. Editorial, polished, high contrast, leave clear space for exact text overlay, no words or lettering in the generated image."
+        output = GradioMCPImageProvider(self.config.agent.image_provider_url, self.config.agent.huggingface_token).generate(prompt, output_dir / "pinrin_generated_pin.png", self.config.agent.image_aspect_ratio, self.config.agent.image_steps)
+        result = {"status": "generated", "images": [output], "prompt": prompt}
+        self.emit("image_generator", "completed", "Pinterest creative generated and ready for QA.", result)
         return result
 
     def run_performance_analyst(self) -> dict[str, Any]:
