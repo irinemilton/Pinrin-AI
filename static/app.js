@@ -39,6 +39,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const target = $("#guide-canvas");
     if (!target || !window.THREE) return;
     const scene = new THREE.Scene();
+    let bat = null;
+    let batMixer = null;
 
     // Portrait focal length (26 deg) eliminates wide-angle distortion and slims proportions
     const camera = new THREE.PerspectiveCamera(29, target.clientWidth / target.clientHeight, .1, 100);
@@ -127,6 +129,27 @@ document.addEventListener("DOMContentLoaded", () => {
           if (loaded.animations?.length) {
             mixer = new THREE.AnimationMixer(characterMesh);
             mixer.clipAction(loaded.animations[0]).play();
+          }
+        },
+        undefined,
+        () => {}
+      );
+    }
+
+    if (THREE.FBXLoader) {
+      new THREE.FBXLoader().load(
+        "/static/guide-model/bat/bat.FBX",
+        (loaded) => {
+          const bounds = new THREE.Box3().setFromObject(loaded);
+          const size = bounds.getSize(new THREE.Vector3());
+          const scale = 0.72 / Math.max(size.x, size.y, size.z, 0.01);
+          loaded.scale.setScalar(scale);
+          loaded.position.set(-3.1, 2.55, 0.35);
+          bat = loaded;
+          scene.add(bat);
+          if (loaded.animations?.length) {
+            batMixer = new THREE.AnimationMixer(loaded);
+            loaded.animations.forEach((clip) => batMixer.clipAction(clip).play());
           }
         },
         undefined,
@@ -238,6 +261,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const delta = Math.min(clock.getDelta(), 0.05);
       const time = clock.elapsedTime;
       if (mixer) mixer.update(delta);
+      if (batMixer) batMixer.update(delta);
+      if (bat) {
+        const flight = (time % 18) / 18;
+        bat.position.x = -3.1 + flight * 6.2;
+        bat.position.y = 2.55 - flight * 2.05 + Math.sin(flight * Math.PI * 2) * 0.16;
+        bat.position.z = 0.35 + Math.sin(flight * Math.PI) * 0.12;
+        bat.rotation.z = -0.12 + Math.sin(flight * Math.PI * 2) * 0.08;
+        bat.rotation.y = Math.PI / 2;
+      }
 
       // Smooth interpolation for lifelike, responsive inertia
       const lerpSpeed = 0.055;
