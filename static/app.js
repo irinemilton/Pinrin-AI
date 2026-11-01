@@ -137,14 +137,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (THREE.FBXLoader) {
-      new THREE.FBXLoader().load(
-        "/static/guide-model/bat/bat.FBX",
+      const loadBat = (path, fallbackPath) => new THREE.FBXLoader().load(
+        path,
         (loaded) => {
           const bounds = new THREE.Box3().setFromObject(loaded);
           const size = bounds.getSize(new THREE.Vector3());
           const scale = 0.72 / Math.max(size.x, size.y, size.z, 0.01);
           loaded.scale.setScalar(scale);
-          loaded.position.set(-3.1, 2.55, 0.35);
+          loaded.position.set(-1.9, 2.15, 0.35);
+          loaded.visible = true;
+          loaded.traverse((child) => {
+            if (child.isMesh) {
+              child.frustumCulled = false;
+              const materials = Array.isArray(child.material) ? child.material : [child.material];
+              materials.forEach((material) => {
+                if (material) {
+                  material.transparent = false;
+                  material.opacity = 1;
+                  material.depthWrite = true;
+                }
+              });
+            }
+          });
           bat = loaded;
           scene.add(bat);
           if (loaded.animations?.length) {
@@ -153,8 +167,12 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         },
         undefined,
-        () => {}
+        () => {
+          console.warn("Primary bat asset failed to load", path);
+          if (fallbackPath) loadBat(fallbackPath, null);
+        }
       );
+      loadBat("/static/guide-model/bat/Bat_morph.FBX", "/static/guide-model/bat/bat.FBX");
     }
 
     // Interactive mouse tracking state
@@ -264,8 +282,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (batMixer) batMixer.update(delta);
       if (bat) {
         const flight = (time % 18) / 18;
-        bat.position.x = -3.1 + flight * 6.2;
-        bat.position.y = 2.55 - flight * 2.05 + Math.sin(flight * Math.PI * 2) * 0.16;
+        bat.position.x = -1.9 + flight * 3.8;
+        bat.position.y = 2.15 - flight * 1.45 + Math.sin(flight * Math.PI * 2) * 0.16;
         bat.position.z = 0.35 + Math.sin(flight * Math.PI) * 0.12;
         bat.rotation.z = -0.12 + Math.sin(flight * Math.PI * 2) * 0.08;
         bat.rotation.y = Math.PI / 2;
