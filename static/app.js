@@ -304,6 +304,24 @@ document.addEventListener("DOMContentLoaded", () => {
       renderer.setSize(width, height);
     }).observe(target);
   }
+  function initCrowViewer() {
+    const frame = $("#crow-viewer");
+    if (!frame) return;
+    const script = document.createElement("script");
+    script.src = "https://static.sketchfab.com/api/sketchfab-viewer-1.12.1.js";
+    script.onload = () => {
+      if (!window.Sketchfab) return;
+      const client = new Sketchfab(frame);
+      client.init("884153aa670740c8b0a7e4fc8ea47a36", {
+        success: (api) => {
+          api.start();
+          api.addEventListener("viewerready", () => frame.classList.add("ready"));
+        },
+        error: () => frame.classList.add("error")
+      });
+    };
+    document.head.appendChild(script);
+  }
   function escapeHtml(value) { return String(value || "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char])); }
-  initCharacter(); checkStatus(); updatePresenter("IDLE", "Awaiting start");
+  initCharacter(); initCrowViewer(); checkStatus(); updatePresenter("IDLE", "Awaiting start");
 });
