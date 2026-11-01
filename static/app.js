@@ -166,6 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function onPointerDown(e) {
+      unlockAudio();
       if (e.target.closest("button, a, input, select, textarea, .event-stream, .topbar")) return;
       isDragging = true;
       dragStartX = e.clientX;
@@ -190,6 +191,48 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("mouseleave", onMouseLeave, { passive: true });
 
     const clock = new THREE.Clock();
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let audioContext = null;
+    let giggleStart = -Infinity;
+    let nextGiggle = 12 + Math.random() * 10;
+
+    function unlockAudio() {
+      if (prefersReducedMotion || audioContext) return;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      audioContext = new AudioContextClass();
+      if (audioContext.state === "suspended") audioContext.resume();
+    }
+
+    function playGiggle() {
+      if (!audioContext || audioContext.state !== "running") return;
+      const now = audioContext.currentTime;
+      const master = audioContext.createGain();
+      master.gain.setValueAtTime(0.0001, now);
+      master.gain.exponentialRampToValueAtTime(0.045, now + 0.04);
+      master.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+      master.connect(audioContext.destination);
+      [560, 720, 590, 760].forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const start = now + index * 0.14;
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.7, start + 0.035);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.17);
+        oscillator.connect(gain);
+        gain.connect(master);
+        oscillator.start(start);
+        oscillator.stop(start + 0.19);
+      });
+    }
+
+    function triggerGiggle(time) {
+      if (prefersReducedMotion) return;
+      giggleStart = time;
+      playGiggle();
+    }
 
     function render() {
       const delta = Math.min(clock.getDelta(), 0.05);
@@ -227,10 +270,27 @@ document.addEventListener("DOMContentLoaded", () => {
       characterPivot.position.x = currentMouseX * 0.09;
       characterPivot.position.z = -Math.abs(currentMouseX) * 0.04;
 
-      // Keep only the original gentle float; no procedural beautification.
-      modelHolder.rotation.set(0, 0, 0);
-      modelHolder.position.y = 0;
-      modelHolder.scale.set(1, 1, 1);
+      if (!prefersReducedMotion) {
+        if (time >= nextGiggle) {
+          triggerGiggle(time);
+          nextGiggle = time + 20 + Math.random() * 18;
+        }
+        const giggleAge = time - giggleStart;
+        const giggleEnvelope = giggleAge >= 0 && giggleAge < 1.15 ? Math.exp(-giggleAge * 3.6) : 0;
+        const giggleShake = Math.sin(giggleAge * 34) * giggleEnvelope * 0.022;
+        const idleSway = Math.sin(time * 0.72) * 0.012;
+        const breath = Math.sin(time * 1.55) * 0.006;
+        modelHolder.rotation.z = idleSway + giggleShake;
+        modelHolder.rotation.x = Math.sin(time * 0.58 + 0.8) * 0.005;
+        modelHolder.position.y = Math.sin(time * 1.1 + 0.4) * 0.006 + Math.abs(Math.sin(giggleAge * 16)) * giggleEnvelope * 0.012;
+        modelHolder.scale.x = 1 - breath * 0.35;
+        modelHolder.scale.y = 1 + breath;
+        modelHolder.scale.z = 1 - breath * 0.35;
+      } else {
+        modelHolder.rotation.set(0, 0, 0);
+        modelHolder.position.y = 0;
+        modelHolder.scale.set(1, 1, 1);
+      }
 
       renderer.render(scene, camera);
       requestAnimationFrame(render);
