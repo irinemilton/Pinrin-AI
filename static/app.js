@@ -136,43 +136,43 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
 
-    if (THREE.FBXLoader) {
-      const loadBat = (path, fallbackPath) => new THREE.FBXLoader().load(
-        path,
-        (loaded) => {
-          const bounds = new THREE.Box3().setFromObject(loaded);
-          const size = bounds.getSize(new THREE.Vector3());
-          const scale = 0.72 / Math.max(size.x, size.y, size.z, 0.01);
-          loaded.scale.setScalar(scale);
-          loaded.position.set(-1.9, 2.15, 0.35);
-          loaded.visible = true;
-          loaded.traverse((child) => {
-            if (child.isMesh) {
-              child.frustumCulled = false;
-              const materials = Array.isArray(child.material) ? child.material : [child.material];
-              materials.forEach((material) => {
-                if (material) {
-                  material.transparent = false;
-                  material.opacity = 1;
-                  material.depthWrite = true;
-                }
-              });
-            }
-          });
-          bat = loaded;
-          scene.add(bat);
-          if (loaded.animations?.length) {
-            batMixer = new THREE.AnimationMixer(loaded);
-            loaded.animations.forEach((clip) => batMixer.clipAction(clip).play());
+    if (THREE.GLTFLoader) {
+      new THREE.GLTFLoader().load("/static/guide-model/bat/bat.glb", (loaded) => {
+        const batScene = loaded.scene;
+        const bounds = new THREE.Box3().setFromObject(batScene);
+        const size = bounds.getSize(new THREE.Vector3());
+        const scale = 0.72 / Math.max(size.x, size.y, size.z, 0.01);
+        batScene.scale.setScalar(scale);
+        batScene.position.set(-1.9, 2.15, 0.35);
+        batScene.rotation.set(0, 0, 0);
+        batScene.visible = true;
+        const batMeshes = [];
+        batScene.traverse((child) => {
+          if (child.isMesh) {
+            batMeshes.push(child);
+            child.frustumCulled = false;
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => {
+              if (!material) return;
+              material.side = THREE.DoubleSide;
+              material.needsUpdate = true;
+            });
           }
-        },
-        undefined,
-        (error) => {
-          console.warn("Bat asset failed to load", path, error);
-          if (fallbackPath) loadBat(fallbackPath, null);
+        });
+        batMeshes.forEach((mesh, index) => {
+          mesh.visible = index < batMeshes.length - 8;
+        });
+        bat = batScene;
+        scene.add(bat);
+        if (loaded.animations?.length) {
+          batMixer = new THREE.AnimationMixer(batScene);
+          loaded.animations.forEach((clip) => {
+            const action = batMixer.clipAction(clip);
+            action.setEffectiveTimeScale(1.1);
+            action.play();
+          });
         }
-      );
-      loadBat("/static/guide-model/bat/Bat_morph.FBX", "/static/guide-model/bat/bat.FBX");
+      }, undefined, (error) => console.warn("Bat GLB failed to load", error));
     }
 
     // Interactive mouse tracking state
@@ -312,13 +312,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (batMixer) batMixer.update(delta);
       if (bat) {
         const flight = (time % 18) / 18;
+        const flightEase = flight * flight * (3 - 2 * flight);
         if (flight < previousFlight) playSound(batHowl);
         previousFlight = flight;
-        bat.position.x = -1.9 + flight * 3.8;
-        bat.position.y = 2.15 - flight * 1.45 + Math.sin(flight * Math.PI * 2) * 0.16;
+        bat.position.x = -1.9 + flightEase * 3.8;
+        bat.position.y = 2.15 - flightEase * 1.45 + Math.sin(flight * Math.PI * 2) * 0.16;
         bat.position.z = 0.35 + Math.sin(flight * Math.PI) * 0.12;
+        bat.rotation.x = Math.sin(flight * Math.PI * 2) * 0.06;
+        bat.rotation.y = Math.sin(flight * Math.PI * 2) * 0.1;
         bat.rotation.z = -0.12 + Math.sin(flight * Math.PI * 2) * 0.08;
-        bat.rotation.y = Math.PI / 2;
       }
       if (!prefersReducedMotion && time >= nextAmbientSound) {
         playSound(ambientHowl);
