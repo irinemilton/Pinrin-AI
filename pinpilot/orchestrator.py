@@ -229,8 +229,13 @@ class Orchestrator:
             product["qa"] = validate_product_files(product.get("files", []), self.config.agent.pin_images)
             if not self.config.agent.pin_images:
                 marketing = self._retry(run_id, "marketing_assistant", lambda: suite.run_marketing_assistant(run["goal"], product, trends))
-                generated = self._retry(run_id, "image_generator", lambda: suite.run_image_generation(run["goal"], product, marketing, product_dir, trends))
-                generated_images = [item["path"] for item in generated["images"]]
+                queue = marketing.get("queue", []) if isinstance(marketing, dict) else []
+                concept_count = min(max(len(queue), 1), self.config.publishing.max_pins_per_run)
+                generated_results = [
+                    self._retry(run_id, "image_generator", lambda index=index: suite.run_image_generation(run["goal"], product, marketing, product_dir, trends, index))
+                    for index in range(concept_count)
+                ]
+                generated_images = [item["path"] for generated in generated_results for item in generated["images"]]
                 product["qa"] = validate_product_files(product.get("files", []), generated_images)
                 product["generated_images"] = generated_images
             else:
@@ -260,7 +265,9 @@ class Orchestrator:
         if not run:
             return
         try:
-            product_file = Path(self.config.agent.product_file)
+            product_artifacts = run.get("artifacts", {}).get("product", {}).get("files", [])
+            product_file_value = self.config.agent.product_file or (product_artifacts[0].get("path") if product_artifacts else "")
+            product_file = Path(product_file_value)
             images = [Path(path) for path in self.config.agent.pin_images]
             if not images:
                 images = [Path(path) for path in run.get("artifacts", {}).get("generated_images", [])]
@@ -281,8 +288,13 @@ class Orchestrator:
             if not self.config.pinterest.is_configured:
                 raise AgentBlocked("Pinterest access token and board ID are required for Pin publication")
             pinterest = PinterestClient(self.config.pinterest)
-            for image in images:
-                result = pinterest.create_pin_from_file(title=title, description=run["goal"], image_path=image, link=product.url, board_id=self.config.pinterest.board_id)
+            queue = run.get("artifacts", {}).get("marketing", {}).get("queue", [])
+            for index, image in enumerate(images):
+                concept = queue[index % len(queue)] if queue and isinstance(queue[index % len(queue)], dict) else {}
+                pin_title = str(concept.get("headline") or concept.get("hook") or title)[:100]
+                description_parts = [concept.get("description", ""), concept.get("cta", ""), concept.get("keywords", "")]
+                pin_description = " ".join(str(part) for part in description_parts if part).strip() or run["goal"]
+                result = pinterest.create_pin_from_file(title=pin_title, description=pin_description[:500], image_path=image, link=product.url, board_id=self.config.pinterest.board_id, alt_text=pin_title)
                 if not result.success:
                     raise AgentBlocked(f"Pinterest publication failed: {result.error}")
                 pins.append({"pin_id": result.pin_id, "pin_url": result.pin_url, "image": str(image), "published_at": now()})

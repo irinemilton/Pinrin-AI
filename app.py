@@ -87,7 +87,7 @@ async def api_status():
         "pinterest_configured": config.pinterest.is_configured,
         "agent": {
             "campaign_configured": bool(config.agent.campaign_goal),
-            "huggingface_configured": bool(config.agent.huggingface_token),
+            "huggingface_configured": HuggingFaceAdapter(config).configured,
             "schedule": orchestrator.schedule_status(),
             "auth_required": bool(PINRIN_API_KEY),
         },

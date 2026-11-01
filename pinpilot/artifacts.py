@@ -24,7 +24,7 @@ def render_product_files(output_dir: Path, title: str, goal: str, blueprint: dic
     for index, section in enumerate(outline, 1):
         if isinstance(section, dict):
             heading = section.get("title") or section.get("name") or f"Section {index}"
-            body = section.get("description") or section.get("content") or "Section content to review."
+            body = section.get("description") or section.get("content") or section.get("summary") or "Section content to review."
         else:
             heading, body = str(section), "Section content to review."
         story.extend([Paragraph(f"{index}. {heading}", styles["Heading2"]), Paragraph(str(body), styles["BodyText"]), Spacer(1, .18 * inch)])
@@ -38,7 +38,7 @@ def render_product_files(output_dir: Path, title: str, goal: str, blueprint: dic
         for index, section in enumerate(outline, 1):
             heading = section.get("title") if isinstance(section, dict) else str(section)
             document.add_heading(f"{index}. {heading}", level=1)
-            document.add_paragraph(str(section.get("content", "Section content to review.")) if isinstance(section, dict) else "Section content to review.")
+            document.add_paragraph(str(section.get("content") or section.get("description") or section.get("summary") or "Section content to review.") if isinstance(section, dict) else "Section content to review.")
         docx_path = output_dir / f"{safe_title}.docx"
         document.save(docx_path)
         files.append({"path": str(docx_path), "kind": "generated_docx"})

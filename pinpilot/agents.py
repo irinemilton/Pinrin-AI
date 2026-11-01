@@ -181,14 +181,15 @@ Each concept must include: theme, hook, headline, description, keywords, visual_
         self.emit("marketing_assistant", "completed", "Marketing queue is awaiting approval.", result)
         return result
 
-    def run_image_generation(self, goal: str, product: dict[str, Any], marketing: dict[str, Any], output_dir: Path, trends: dict[str, Any] | None = None) -> dict[str, Any]:
+    def run_image_generation(self, goal: str, product: dict[str, Any], marketing: dict[str, Any], output_dir: Path, trends: dict[str, Any] | None = None, concept_index: int = 0) -> dict[str, Any]:
         self.emit("image_generator", "started", "Generating an approval-ready Pinterest creative.", None)
         visual_brief = ""
         queue = marketing.get("queue", []) if isinstance(marketing, dict) else []
-        if queue and isinstance(queue[0], dict):
-            visual_brief = queue[0].get("visual_brief", "") or queue[0].get("visual brief", "")
+        concept = queue[concept_index] if concept_index < len(queue) and isinstance(queue[concept_index], dict) else {}
+        if concept:
+            visual_brief = concept.get("visual_brief", "") or concept.get("visual brief", "")
         prompt = f"{self.config.agent.image_instructions} Pinterest product poster background. Product: {product.get('title', self.config.agent.product_title or 'digital product')}. Goal: {goal}. Visual direction: {visual_brief}. Trend signal to reinterpret, not copy: {self._trend_context(trends or {})}. Make the image original, editorial, polished, high contrast, and leave clear space for exact text overlay. No words, logos, watermarks, or lettering in the generated image."
-        output = GradioMCPImageProvider(self.config.agent.image_provider_url, self.config.agent.huggingface_token).generate(prompt, output_dir / "pinrin_generated_pin.png", self.config.agent.image_aspect_ratio, self.config.agent.image_steps)
+        output = GradioMCPImageProvider(self.config.agent.image_provider_url, self.config.agent.huggingface_token).generate(prompt, output_dir / f"pinrin_generated_pin_{concept_index + 1}.png", self.config.agent.image_aspect_ratio, self.config.agent.image_steps)
         result = {"status": "generated", "images": [output], "prompt": prompt}
         self.emit("image_generator", "completed", "Pinterest creative generated and ready for QA.", result)
         return result

@@ -231,9 +231,9 @@ class Config:
         elif self.agent.provider != "novita" and not self.agent.huggingface_token:
             issues.append("⚠️  HUGGINGFACE_API_TOKEN not set — model-backed agents cannot run")
         if not self.agent.product_file:
-            issues.append("⚠️  AGENT_PRODUCT_FILE not set — publishing needs a product artifact")
+            issues.append("ℹ️  AGENT_PRODUCT_FILE not set — Product Builder will generate the product artifact")
         if not self.agent.pin_images:
-            issues.append("⚠️  AGENT_PIN_IMAGES not set — Pinterest publishing needs creatives")
+            issues.append("ℹ️  AGENT_PIN_IMAGES not set — Marketing Assistant and Image Generator will create creatives")
         if self.agent.price <= 0:
             issues.append("⚠️  AGENT_PRICE must be greater than zero for Gumroad publication")
 
