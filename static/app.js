@@ -35,7 +35,268 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#schedule-button").addEventListener("click", async () => { const endpoint = state.schedule ? "stop" : "start"; const response = await fetch(apiUrl(`/api/agent/schedule/${endpoint}`), { method: "POST" }); const result = await response.json(); state.schedule = Boolean(result.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; });
   async function loadRecords() { try { const response = await fetch(apiUrl("/api/products")); const data = await response.json(); const products = data.products || []; $("#metric-products").textContent = products.length; $("#metric-pins").textContent = products.reduce((sum, item) => sum + (item.pins || []).filter((pin) => pin.status === "published").length, 0); } catch (_) {} }
   async function checkStatus() { try { const response = await fetch(apiUrl("/api/status")); const data = await response.json(); $("#connection-dot").style.background = data.status === "ok" ? "var(--green)" : "var(--amber)"; $("#connection-text").textContent = data.status === "ok" ? "SERVER CONNECTED" : "SERVER ATTENTION"; $("#configuration-note").textContent = data.agent?.campaign_configured ? `Configured goal ready. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.` : "No AGENT_CAMPAIGN_GOAL configured on the server."; state.schedule = Boolean(data.agent?.schedule?.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; } catch (_) { $("#connection-text").textContent = apiBase ? "BACKEND OFFLINE" : "FRONTEND ONLY"; $("#configuration-note").textContent = apiBase ? "The backend is unavailable." : "Set PINRIN_API_BASE to connect the autonomous backend."; } }
-  function initCharacter() { const target = $("#guide-canvas"); if (!target || !window.THREE) return; const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(29, target.clientWidth / target.clientHeight, .1, 100); camera.position.set(0, 1.32, 5.2); camera.lookAt(0, 1.18, 0); const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true }); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); renderer.setSize(target.clientWidth, target.clientHeight); renderer.outputEncoding = THREE.sRGBEncoding; target.appendChild(renderer.domElement); scene.add(new THREE.AmbientLight(0xffffff, 1.8)); const key = new THREE.PointLight(0xff3f76, 4, 10); key.position.set(2.5, 3.5, 4); scene.add(key); const rim = new THREE.PointLight(0x74d6e5, 3, 9); rim.position.set(-3, 1, 3); scene.add(rim); let character = new THREE.Group(), mixer = null, baseY = 0; const fallback = new THREE.Mesh(new THREE.IcosahedronGeometry(.72, 2), new THREE.MeshStandardMaterial({ color: 0x9c7bff, roughness: .3, metalness: .4 })); fallback.position.y = 1.1; character.add(fallback); scene.add(character); if (THREE.GLTFLoader) new THREE.GLTFLoader().load("/static/guide-model/source/ip-chainsaw-man__makima__real__sexy.glb", (loaded) => { scene.remove(character); character = loaded.scene; const bounds = new THREE.Box3().setFromObject(character), size = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3()), scale = 3.8 / Math.max(size.x, size.y, size.z, .01); character.scale.setScalar(scale); baseY = -center.y * scale - .1; character.position.set(-center.x * scale, baseY, -center.z * scale); character.rotation.set(0, 0, 0); scene.add(character); if (loaded.animations?.length) { mixer = new THREE.AnimationMixer(character); mixer.clipAction(loaded.animations[0]).play(); } }, undefined, () => {}); const clock = new THREE.Clock(); function render() { const delta = Math.min(clock.getDelta(), .05), time = clock.elapsedTime; if (mixer) mixer.update(delta); character.rotation.y = 0; character.position.y = baseY + Math.sin(time * 1.1) * .025; renderer.render(scene, camera); requestAnimationFrame(render); } render(); new ResizeObserver(() => { const width = target.clientWidth, height = target.clientHeight; camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height); }).observe(target); }
+  function initCharacter() {
+    const target = $("#guide-canvas");
+    if (!target || !window.THREE) return;
+    const scene = new THREE.Scene();
+
+    // Portrait focal length (26 deg) eliminates wide-angle distortion and slims proportions
+    const camera = new THREE.PerspectiveCamera(26, target.clientWidth / target.clientHeight, .1, 100);
+    // Positioned at eye level with flattering portrait framing
+    camera.position.set(0, 1.25, 4.8);
+    camera.lookAt(0, 1.22, 0);
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    renderer.setSize(target.clientWidth, target.clientHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    // ACES Filmic Tone Mapping for cinematic skin tones, silky suit luster, and film contrast
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.22;
+    target.appendChild(renderer.domElement);
+
+    // --- High-End Beauty & Glamour Studio Lighting ---
+    // Soft warm ambient fill for smooth skin gradients
+    const ambientLight = new THREE.AmbientLight(0xffe4ec, 1.35);
+    scene.add(ambientLight);
+
+    // Warm key beauty light sculpted for cheekbones, lips & jawline
+    const keyLight = new THREE.DirectionalLight(0xfff1e8, 3.2);
+    keyLight.position.set(1.4, 2.4, 3.2);
+    scene.add(keyLight);
+
+    // Vivid ruby-magenta hair rim light (Makima iconic hair halo & silhouette)
+    const hairRim = new THREE.PointLight(0xff1860, 5.8, 9);
+    hairRim.position.set(-2.2, 2.2, -1.2);
+    scene.add(hairRim);
+
+    // Seductive violet/cyan fill on suit waist & fabric folds
+    const fillLight = new THREE.PointLight(0x7050ff, 2.8, 8);
+    fillLight.position.set(-2.2, 0.6, 2.2);
+    scene.add(fillLight);
+
+    // Eye catchlight (creates alluring sparkle in pupils and lips)
+    const eyeCatchlight = new THREE.PointLight(0xffeedd, 1.4, 4);
+    eyeCatchlight.position.set(0.15, 1.35, 2.2);
+    scene.add(eyeCatchlight);
+
+    // --- Floating Atmospheric Glowing Ember Motes ---
+    const emberCount = 55;
+    const emberGeo = new THREE.BufferGeometry();
+    const emberPositions = new Float32Array(emberCount * 3);
+    const emberSpeeds = new Float32Array(emberCount);
+    for (let i = 0; i < emberCount; i++) {
+      emberPositions[i * 3] = (Math.random() - 0.5) * 3.5;
+      emberPositions[i * 3 + 1] = Math.random() * 2.8;
+      emberPositions[i * 3 + 2] = (Math.random() - 0.5) * 2.5;
+      emberSpeeds[i] = 0.2 + Math.random() * 0.4;
+    }
+    emberGeo.setAttribute("position", new THREE.BufferAttribute(emberPositions, 3));
+    const emberMat = new THREE.PointsMaterial({
+      color: 0xff3f76,
+      size: 0.045,
+      transparent: true,
+      opacity: 0.75,
+      blending: THREE.AdditiveBlending
+    });
+    const embers = new THREE.Points(emberGeo, emberMat);
+    scene.add(embers);
+
+    // Root pivot for natural centered rotations and parallax
+    const characterPivot = new THREE.Group();
+    const modelHolder = new THREE.Group();
+    characterPivot.add(modelHolder);
+    scene.add(characterPivot);
+
+    let mixer = null;
+    // Perfect vertical portrait alignment: eyes at upper third, waist at lower third
+    let baseY = -0.22;
+    characterPivot.position.set(0, baseY, 0);
+
+    // Base facing: Seductive 3/4 pose facing towards the user and content
+    const baseYaw = -1.42;
+    const basePitch = -0.04;
+    const baseRoll = 0.02;
+
+    // Fallback mesh while model loads
+    const fallback = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(.72, 2),
+      new THREE.MeshStandardMaterial({ color: 0x9c7bff, roughness: .3, metalness: .4 })
+    );
+    fallback.position.y = 1.1;
+    modelHolder.add(fallback);
+
+    // Load GLB character
+    if (THREE.GLTFLoader) {
+      new THREE.GLTFLoader().load(
+        "/static/guide-model/source/ip-chainsaw-man__makima__real__sexy.glb",
+        (loaded) => {
+          modelHolder.remove(fallback);
+          const characterMesh = loaded.scene;
+          const bounds = new THREE.Box3().setFromObject(characterMesh);
+          const size = bounds.getSize(new THREE.Vector3());
+          const center = bounds.getCenter(new THREE.Vector3());
+          const scale = 3.8 / Math.max(size.x, size.y, size.z, 0.01);
+
+          // Refined silhouette proportions: sleek waist, statuesque posture, graceful neck
+          characterMesh.scale.set(scale * 0.95, scale * 1.025, scale * 0.96);
+
+          // Center the mesh precisely around the pivot origin
+          characterMesh.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+
+          // Enhance material shaders for silky luster and crisp textures
+          characterMesh.traverse((child) => {
+            if (child.isMesh && child.material) {
+              child.material.roughness = 0.38;
+              child.material.metalness = 0.06;
+              if (child.material.map) {
+                child.material.map.encoding = THREE.sRGBEncoding;
+                child.material.map.anisotropy = 16;
+              }
+              if (child.material.normalMap) {
+                child.material.normalScale.set(1.2, 1.2);
+              }
+            }
+          });
+
+          modelHolder.add(characterMesh);
+          baseY = -0.22;
+          characterPivot.position.set(0, baseY, 0);
+
+          if (loaded.animations?.length) {
+            mixer = new THREE.AnimationMixer(characterMesh);
+            mixer.clipAction(loaded.animations[0]).play();
+          }
+        },
+        undefined,
+        () => {}
+      );
+    }
+
+    // Interactive mouse tracking state
+    let targetMouseX = 0, targetMouseY = 0;
+    let currentMouseX = 0, currentMouseY = 0;
+    let isDragging = false;
+    let dragStartX = 0, dragStartY = 0;
+    let dragRotX = 0, dragRotY = 0;
+    let targetDragRotX = 0, targetDragRotY = 0;
+
+    function onPointerMove(e) {
+      const rect = target.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Normalized coordinates relative to the canvas center (-1 to 1)
+      const nx = (e.clientX - centerX) / (window.innerWidth * 0.5);
+      const ny = (e.clientY - centerY) / (window.innerHeight * 0.5);
+      targetMouseX = Math.max(-1.0, Math.min(1.0, nx));
+      targetMouseY = Math.max(-1.0, Math.min(1.0, ny));
+
+      if (isDragging) {
+        const deltaX = e.clientX - dragStartX;
+        const deltaY = e.clientY - dragStartY;
+        targetDragRotY += deltaX * 0.007;
+        targetDragRotX += deltaY * 0.004;
+        // Restrict drag pitch strictly to a flattering portrait range
+        targetDragRotX = Math.max(-0.16, Math.min(0.16, targetDragRotX));
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+      }
+    }
+
+    function onPointerDown(e) {
+      if (e.target.closest("button, a, input, select, textarea, .event-stream, .topbar")) return;
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+    }
+
+    function onPointerUp() {
+      isDragging = false;
+    }
+
+    function onMouseLeave() {
+      if (!isDragging) {
+        targetMouseX = 0;
+        targetMouseY = 0;
+      }
+    }
+
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("pointerup", onPointerUp, { passive: true });
+    window.addEventListener("pointercancel", onPointerUp, { passive: true });
+    document.addEventListener("mouseleave", onMouseLeave, { passive: true });
+
+    const clock = new THREE.Clock();
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function render() {
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const time = clock.elapsedTime;
+      if (mixer) mixer.update(delta);
+
+      // Smooth interpolation for lifelike, responsive inertia
+      const lerpSpeed = 0.055;
+      currentMouseX += (targetMouseX - currentMouseX) * lerpSpeed;
+      currentMouseY += (targetMouseY - currentMouseY) * lerpSpeed;
+      dragRotX += (targetDragRotX - dragRotX) * 0.08;
+      dragRotY += (targetDragRotY - dragRotY) * 0.08;
+
+      // Animate floating ember motes
+      const posAttr = emberGeo.attributes.position;
+      for (let i = 0; i < emberCount; i++) {
+        let y = posAttr.getY(i) + emberSpeeds[i] * delta * 0.45;
+        if (y > 2.8) y = -0.2;
+        posAttr.setY(i, y);
+      }
+      posAttr.needsUpdate = true;
+
+      // Seductive head & body rotation anchored at the alluring 3/4 base pose
+      const yaw = baseYaw + dragRotY + (currentMouseX * 0.42);
+      const pitch = basePitch + dragRotX + (currentMouseY * 0.16);
+      const roll = baseRoll - (currentMouseX * 0.06);
+
+      characterPivot.rotation.y = yaw;
+      characterPivot.rotation.x = pitch;
+      characterPivot.rotation.z = roll;
+
+      // Parallax translation + gentle breathing float
+      const idleFloat = Math.sin(time * 1.25) * 0.02;
+      characterPivot.position.y = baseY + idleFloat - (currentMouseY * 0.04);
+      characterPivot.position.x = currentMouseX * 0.09;
+      characterPivot.position.z = -Math.abs(currentMouseX) * 0.04;
+
+      // The source GLB is an unrigged single mesh, so use layered transforms for
+      // an idle pose instead of pretending independent bones are available.
+      if (!prefersReducedMotion) {
+        const sway = Math.sin(time * 0.72) * 0.012;
+        const breath = Math.sin(time * 1.55) * 0.006;
+        modelHolder.rotation.z = sway;
+        modelHolder.rotation.x = Math.sin(time * 0.58 + 0.8) * 0.005;
+        modelHolder.position.y = Math.sin(time * 1.1 + 0.4) * 0.006;
+        modelHolder.scale.x = 1 - breath * 0.35;
+        modelHolder.scale.y = 1 + breath;
+        modelHolder.scale.z = 1 - breath * 0.35;
+      }
+
+      // Reactive key light parallax tracking for alluring facial highlights
+      keyLight.position.x = 1.4 + currentMouseX * 0.6;
+      keyLight.position.y = 2.4 - currentMouseY * 0.4;
+      eyeCatchlight.position.x = 0.15 + currentMouseX * 0.3;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(render);
+    }
+    render();
+
+    new ResizeObserver(() => {
+      const width = target.clientWidth, height = target.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }).observe(target);
+  }
   function escapeHtml(value) { return String(value || "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char])); }
   initCharacter(); checkStatus(); updatePresenter("IDLE", "Awaiting start");
 });
