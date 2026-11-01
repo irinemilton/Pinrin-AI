@@ -234,15 +234,35 @@ document.addEventListener("DOMContentLoaded", () => {
     const clock = new THREE.Clock();
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let audioContext = null;
+    let audioUnlocked = false;
+    let initialHowlPlayed = false;
     let giggleStart = -Infinity;
     let nextGiggle = 12 + Math.random() * 10;
+    let nextAmbientSound = 16 + Math.random() * 12;
+    let previousFlight = 0;
+    const batHowl = new Audio("/static/mixkit-lone-wolf-howling-1729.wav");
+    const ambientHowl = new Audio("/static/mixkit-wolves-at-scary-forest-2485.wav");
+    batHowl.volume = 0.22;
+    ambientHowl.volume = 0.12;
+    batHowl.preload = "auto";
+    ambientHowl.preload = "auto";
 
     function unlockAudio() {
-      if (prefersReducedMotion || audioContext) return;
+      if (prefersReducedMotion) return;
+      audioUnlocked = true;
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-      audioContext = new AudioContextClass();
-      if (audioContext.state === "suspended") audioContext.resume();
+      if (AudioContextClass && !audioContext) audioContext = new AudioContextClass();
+      if (audioContext?.state === "suspended") audioContext.resume();
+      if (!initialHowlPlayed) {
+        initialHowlPlayed = true;
+        playSound(batHowl);
+      }
+    }
+
+    function playSound(audio) {
+      if (!audioUnlocked || prefersReducedMotion) return;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
     }
 
     function playGiggle() {
@@ -282,11 +302,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (batMixer) batMixer.update(delta);
       if (bat) {
         const flight = (time % 18) / 18;
+        if (flight < previousFlight) playSound(batHowl);
+        previousFlight = flight;
         bat.position.x = -1.9 + flight * 3.8;
         bat.position.y = 2.15 - flight * 1.45 + Math.sin(flight * Math.PI * 2) * 0.16;
         bat.position.z = 0.35 + Math.sin(flight * Math.PI) * 0.12;
         bat.rotation.z = -0.12 + Math.sin(flight * Math.PI * 2) * 0.08;
         bat.rotation.y = Math.PI / 2;
+      }
+      if (!prefersReducedMotion && time >= nextAmbientSound) {
+        playSound(ambientHowl);
+        nextAmbientSound = time + 18 + Math.random() * 14;
       }
 
       // Smooth interpolation for lifelike, responsive inertia
