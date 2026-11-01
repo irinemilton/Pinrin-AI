@@ -41,47 +41,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const scene = new THREE.Scene();
 
     // Portrait focal length (26 deg) eliminates wide-angle distortion and slims proportions
-    const camera = new THREE.PerspectiveCamera(26, target.clientWidth / target.clientHeight, .1, 100);
-    // Positioned at eye level with flattering portrait framing
-    camera.position.set(0, 1.25, 4.8);
-    camera.lookAt(0, 1.22, 0);
+    const camera = new THREE.PerspectiveCamera(29, target.clientWidth / target.clientHeight, .1, 100);
+    camera.position.set(0, 1.32, 5.2);
+    camera.lookAt(0, 1.18, 0);
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(target.clientWidth, target.clientHeight);
     renderer.outputEncoding = THREE.sRGBEncoding;
-    // ACES Filmic Tone Mapping for cinematic skin tones, silky suit luster, and film contrast
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.22;
     target.appendChild(renderer.domElement);
 
-    // --- High-End Beauty & Glamour Studio Lighting ---
-    // Soft warm ambient fill for smooth skin gradients
-    const ambientLight = new THREE.AmbientLight(0xffe4ec, 1.35);
-    scene.add(ambientLight);
-
-    // Warm key beauty light sculpted for cheekbones, lips & jawline
-    const keyLight = new THREE.DirectionalLight(0xfff1e8, 3.2);
-    keyLight.position.set(1.4, 2.4, 3.2);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+    const keyLight = new THREE.PointLight(0xffffff, 4, 10);
+    keyLight.position.set(2.5, 3.5, 4);
     scene.add(keyLight);
 
-    // Vivid ruby-magenta hair rim light (Makima iconic hair halo & silhouette)
-    const hairRim = new THREE.PointLight(0xff1860, 5.8, 9);
-    hairRim.position.set(-2.2, 2.2, -1.2);
-    scene.add(hairRim);
-
-    // Seductive violet/cyan fill on suit waist & fabric folds
-    const fillLight = new THREE.PointLight(0x7050ff, 2.8, 8);
-    fillLight.position.set(-2.2, 0.6, 2.2);
-    scene.add(fillLight);
-
-    // Eye catchlight (creates alluring sparkle in pupils and lips)
-    const eyeCatchlight = new THREE.PointLight(0xffeedd, 1.4, 4);
-    eyeCatchlight.position.set(0.15, 1.35, 2.2);
-    scene.add(eyeCatchlight);
-
     // --- Floating Atmospheric Glowing Ember Motes ---
-    const emberCount = 55;
+    const emberCount = 0;
     const emberGeo = new THREE.BufferGeometry();
     const emberPositions = new Float32Array(emberCount * 3);
     const emberSpeeds = new Float32Array(emberCount);
@@ -113,10 +89,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let baseY = -0.22;
     characterPivot.position.set(0, baseY, 0);
 
-    // Base facing: Seductive 3/4 pose facing towards the user and content
-    const baseYaw = -1.42;
-    const basePitch = -0.04;
-    const baseRoll = 0.02;
+    // Keep the source model's original front-facing orientation.
+    const baseYaw = 0;
+    const basePitch = 0;
+    const baseRoll = 0;
 
     // Fallback mesh while model loads
     const fallback = new THREE.Mesh(
@@ -143,21 +119,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
           // Center the mesh precisely around the pivot origin
           characterMesh.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
-
-          // Enhance material shaders for silky luster and crisp textures
-          characterMesh.traverse((child) => {
-            if (child.isMesh && child.material) {
-              child.material.roughness = 0.38;
-              child.material.metalness = 0.06;
-              if (child.material.map) {
-                child.material.map.encoding = THREE.sRGBEncoding;
-                child.material.map.anisotropy = 16;
-              }
-              if (child.material.normalMap) {
-                child.material.normalScale.set(1.2, 1.2);
-              }
-            }
-          });
 
           modelHolder.add(characterMesh);
           baseY = -0.22;
@@ -229,7 +190,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("mouseleave", onMouseLeave, { passive: true });
 
     const clock = new THREE.Clock();
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     function render() {
       const delta = Math.min(clock.getDelta(), 0.05);
@@ -267,23 +227,10 @@ document.addEventListener("DOMContentLoaded", () => {
       characterPivot.position.x = currentMouseX * 0.09;
       characterPivot.position.z = -Math.abs(currentMouseX) * 0.04;
 
-      // The source GLB is an unrigged single mesh, so use layered transforms for
-      // an idle pose instead of pretending independent bones are available.
-      if (!prefersReducedMotion) {
-        const sway = Math.sin(time * 0.72) * 0.012;
-        const breath = Math.sin(time * 1.55) * 0.006;
-        modelHolder.rotation.z = sway;
-        modelHolder.rotation.x = Math.sin(time * 0.58 + 0.8) * 0.005;
-        modelHolder.position.y = Math.sin(time * 1.1 + 0.4) * 0.006;
-        modelHolder.scale.x = 1 - breath * 0.35;
-        modelHolder.scale.y = 1 + breath;
-        modelHolder.scale.z = 1 - breath * 0.35;
-      }
-
-      // Reactive key light parallax tracking for alluring facial highlights
-      keyLight.position.x = 1.4 + currentMouseX * 0.6;
-      keyLight.position.y = 2.4 - currentMouseY * 0.4;
-      eyeCatchlight.position.x = 0.15 + currentMouseX * 0.3;
+      // Keep only the original gentle float; no procedural beautification.
+      modelHolder.rotation.set(0, 0, 0);
+      modelHolder.position.y = 0;
+      modelHolder.scale.set(1, 1, 1);
 
       renderer.render(scene, camera);
       requestAnimationFrame(render);
