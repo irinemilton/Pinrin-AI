@@ -167,8 +167,8 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         },
         undefined,
-        () => {
-          console.warn("Primary bat asset failed to load", path);
+        (error) => {
+          console.warn("Bat asset failed to load", path, error);
           if (fallbackPath) loadBat(fallbackPath, null);
         }
       );
@@ -239,13 +239,18 @@ document.addEventListener("DOMContentLoaded", () => {
     let giggleStart = -Infinity;
     let nextGiggle = 12 + Math.random() * 10;
     let nextAmbientSound = 16 + Math.random() * 12;
+    let nextImpactSound = 30;
+    let impactPlayed = false;
     let previousFlight = 0;
     const batHowl = new Audio("/static/mixkit-lone-wolf-howling-1729.wav");
     const ambientHowl = new Audio("/static/mixkit-wolves-at-scary-forest-2485.wav");
+    const horrorImpact = new Audio("/static/mixkit-horror-impact-773.wav");
     batHowl.volume = 0.22;
     ambientHowl.volume = 0.12;
+    horrorImpact.volume = 0.18;
     batHowl.preload = "auto";
     ambientHowl.preload = "auto";
+    horrorImpact.preload = "auto";
 
     function unlockAudio() {
       if (prefersReducedMotion) return;
@@ -256,6 +261,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!initialHowlPlayed) {
         initialHowlPlayed = true;
         playSound(batHowl);
+      }
+      if (!impactPlayed && clock.elapsedTime >= 30) {
+        impactPlayed = true;
+        playSound(horrorImpact);
+        nextImpactSound = clock.elapsedTime + 30;
       }
     }
 
@@ -313,6 +323,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!prefersReducedMotion && time >= nextAmbientSound) {
         playSound(ambientHowl);
         nextAmbientSound = time + 18 + Math.random() * 14;
+      }
+      if (!prefersReducedMotion && time >= nextImpactSound) {
+        playSound(horrorImpact);
+        impactPlayed = true;
+        nextImpactSound = time + 30;
       }
 
       // Smooth interpolation for lifelike, responsive inertia
