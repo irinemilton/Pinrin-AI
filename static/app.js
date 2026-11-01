@@ -39,8 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const target = $("#guide-canvas");
     if (!target || !window.THREE) return;
     const scene = new THREE.Scene();
-    let bat = null;
-    let batMixer = null;
 
     // Portrait focal length (26 deg) eliminates wide-angle distortion and slims proportions
     const camera = new THREE.PerspectiveCamera(29, target.clientWidth / target.clientHeight, .1, 100);
@@ -87,6 +85,26 @@ document.addEventListener("DOMContentLoaded", () => {
     scene.add(characterPivot);
 
     let mixer = null;
+    let spider = null;
+    let spiderMixer = null;
+    let spiderBones = [];
+    let spiderLegs = [];
+    const spiderPath = [
+      { x: -2.8, y: 1.65 },
+      { x: -2.25, y: 1.7 },
+      { x: -1.55, y: 1.55 },
+      { x: -0.85, y: 1.25 },
+      { x: -0.25, y: 1.48 },
+      { x: 0.22, y: 1.7 },
+      { x: 0.55, y: 1.52 },
+      { x: 0.62, y: 1.08 },
+      { x: 0.5, y: 0.62 },
+      { x: 0.72, y: 0.2 },
+      { x: 1.2, y: 0.12 },
+      { x: 1.75, y: 0.42 },
+      { x: 2.35, y: 0.65 },
+      { x: 2.8, y: 0.55 }
+    ];
     // Perfect vertical portrait alignment: eyes at upper third, waist at lower third
     let baseY = -0.22;
     characterPivot.position.set(0, baseY, 0);
@@ -104,7 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
     fallback.position.y = 1.1;
     modelHolder.add(fallback);
 
-    // Load GLB character
+    // Load the woman as the main character.
     if (THREE.GLTFLoader) {
       new THREE.GLTFLoader().load(
         "/static/guide-model/source/ip-chainsaw-man__makima__real__sexy.glb",
@@ -134,45 +152,48 @@ document.addEventListener("DOMContentLoaded", () => {
         undefined,
         () => {}
       );
-    }
 
-    if (THREE.GLTFLoader) {
-      new THREE.GLTFLoader().load("/static/guide-model/bat/bat.glb", (loaded) => {
-        const batScene = loaded.scene;
-        const bounds = new THREE.Box3().setFromObject(batScene);
-        const size = bounds.getSize(new THREE.Vector3());
-        const scale = 0.72 / Math.max(size.x, size.y, size.z, 0.01);
-        batScene.scale.setScalar(scale);
-        batScene.position.set(-1.9, 2.15, 0.35);
-        batScene.rotation.set(0, 0, 0);
-        batScene.visible = true;
-        const batMeshes = [];
-        batScene.traverse((child) => {
-          if (child.isMesh) {
-            batMeshes.push(child);
-            child.frustumCulled = false;
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach((material) => {
-              if (!material) return;
-              material.side = THREE.DoubleSide;
-              material.needsUpdate = true;
-            });
-          }
-        });
-        batMeshes.forEach((mesh, index) => {
-          mesh.visible = index < batMeshes.length - 8;
-        });
-        bat = batScene;
-        scene.add(bat);
-        if (loaded.animations?.length) {
-          batMixer = new THREE.AnimationMixer(batScene);
-          loaded.animations.forEach((clip) => {
-            const action = batMixer.clipAction(clip);
-            action.setEffectiveTimeScale(1.1);
-            action.play();
+      // The spider is a separate, top-facing crawler in front of the woman.
+      new THREE.GLTFLoader().load(
+        "/static/guide-model/spider/spider.glb",
+        (loaded) => {
+          const spiderMesh = loaded.scene;
+          const bounds = new THREE.Box3().setFromObject(spiderMesh);
+          const size = bounds.getSize(new THREE.Vector3());
+          const center = bounds.getCenter(new THREE.Vector3());
+          const scale = 0.95 / Math.max(size.x, size.y, size.z, 0.01);
+          spiderMesh.scale.setScalar(scale);
+          spiderMesh.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+          spiderMesh.rotation.set(Math.PI / 2, 0, 0);
+          spiderMesh.traverse((child) => {
+            if (child.isBone) spiderBones.push({ bone: child, x: child.rotation.x, y: child.rotation.y, z: child.rotation.z });
+            if (child.isMesh) child.frustumCulled = false;
           });
-        }
-      }, undefined, (error) => console.warn("Bat GLB failed to load", error));
+          const spine = spiderBones.find(({ bone }) => bone.name === "spine_02")?.bone;
+          if (spine) {
+            spiderLegs = spine.children
+              .filter((child) => child.isBone && child.children.length)
+              .map((root) => {
+                const chain = [];
+                let bone = root;
+                while (bone?.isBone) {
+                  chain.push({ bone, x: bone.rotation.x, y: bone.rotation.y, z: bone.rotation.z });
+                  bone = bone.children.find((child) => child.isBone);
+                }
+                return chain;
+              })
+              .filter((chain) => chain.length >= 3);
+          }
+          spider = spiderMesh;
+          scene.add(spider);
+          if (loaded.animations?.length) {
+            spiderMixer = new THREE.AnimationMixer(spiderMesh);
+            loaded.animations.forEach((clip) => spiderMixer.clipAction(clip).play());
+          }
+        },
+        undefined,
+        (error) => console.warn("Spider GLB failed to load", error)
+      );
     }
 
     // Interactive mouse tracking state
@@ -241,7 +262,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let nextAmbientSound = 16 + Math.random() * 12;
     let nextImpactSound = 30;
     let impactPlayed = false;
-    let previousFlight = 0;
     const batHowl = new Audio("/static/mixkit-lone-wolf-howling-1729.wav");
     const ambientHowl = new Audio("/static/mixkit-wolves-at-scary-forest-2485.wav");
     const horrorImpact = new Audio("/static/mixkit-horror-impact-773.wav");
@@ -309,18 +329,35 @@ document.addEventListener("DOMContentLoaded", () => {
       const delta = Math.min(clock.getDelta(), 0.05);
       const time = clock.elapsedTime;
       if (mixer) mixer.update(delta);
-      if (batMixer) batMixer.update(delta);
-      if (bat) {
-        const flight = (time % 18) / 18;
-        const flightEase = flight * flight * (3 - 2 * flight);
-        if (flight < previousFlight) playSound(batHowl);
-        previousFlight = flight;
-        bat.position.x = -1.9 + flightEase * 3.8;
-        bat.position.y = 2.15 - flightEase * 1.45 + Math.sin(flight * Math.PI * 2) * 0.16;
-        bat.position.z = 0.35 + Math.sin(flight * Math.PI) * 0.12;
-        bat.rotation.x = Math.sin(flight * Math.PI * 2) * 0.06;
-        bat.rotation.y = Math.sin(flight * Math.PI * 2) * 0.1;
-        bat.rotation.z = -0.12 + Math.sin(flight * Math.PI * 2) * 0.08;
+      if (spiderMixer) spiderMixer.update(delta);
+      if (spider) {
+        const crawl = (time % 24) / 24;
+        const pathPosition = crawl * (spiderPath.length - 1);
+        const pathIndex = Math.min(Math.floor(pathPosition), spiderPath.length - 2);
+        const pathMix = pathPosition - pathIndex;
+        const current = spiderPath[pathIndex];
+        const next = spiderPath[pathIndex + 1];
+        const x = current.x + (next.x - current.x) * pathMix;
+        const y = current.y + (next.y - current.y) * pathMix;
+        const dx = next.x - current.x;
+        const dy = next.y - current.y;
+        spider.position.x = x;
+        spider.position.y = y;
+        spider.position.z = 0.75;
+        spider.rotation.z = Math.atan2(dy, dx);
+      }
+      if (spiderLegs.length && !prefersReducedMotion) {
+        spiderLegs.forEach((leg, legIndex) => {
+          const phase = time * 4.2 + legIndex * Math.PI;
+          const step = Math.sin(phase);
+          const side = legIndex % 2 ? 1 : -1;
+          leg.forEach(({ bone, x, y, z }, jointIndex) => {
+            const lift = Math.max(0, step) * side;
+            bone.rotation.x = x + lift * (jointIndex === 1 ? 0.24 : 0.08);
+            bone.rotation.y = y;
+            bone.rotation.z = z + step * side * (jointIndex === 0 ? 0.2 : jointIndex === 1 ? -0.3 : 0.16);
+          });
+        });
       }
       if (!prefersReducedMotion && time >= nextAmbientSound) {
         playSound(ambientHowl);
