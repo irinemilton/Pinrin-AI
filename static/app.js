@@ -1,7 +1,7 @@
 /* The client observes the server-side orchestrator. It never invents agent results. */
 document.addEventListener("DOMContentLoaded", () => {
   const $ = (selector) => document.querySelector(selector);
-  const state = { runId: null, timer: null, schedule: false, currentScene: "" };
+  const state = { runId: null, timer: null, schedule: false, currentScene: "", historyRun: false };
   const apiBase = String(window.PINRIN_API_BASE || "").replace(/\/$/, "");
   const apiUrl = (path) => `${apiBase}${path}`;
   const sceneFor = { queued: "run", running: "run", awaiting_approval: "approval", awaiting_publish_approval: "approval", publishing: "publish", completed: "optimize", blocked: "run" };
@@ -47,21 +47,69 @@ document.addEventListener("DOMContentLoaded", () => {
   async function poll() { if (!state.runId) return; try { const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}`)); if (!response.ok) throw new Error("Run not found"); renderRun(await response.json()); } catch (error) { $("#run-copy").textContent = error.message; } }
   function startPolling() { stopPolling(); state.timer = window.setInterval(poll, 1600); poll(); }
   function stopPolling() { if (state.timer) window.clearInterval(state.timer); state.timer = null; }
-  let pendingRun = false;
-  function requestRunCode() {
-    pendingRun = true;
+  function formatDate(value) { try { return new Date(value).toLocaleString(); } catch (_) { return value || ""; } }
+  function historyStatus(status) {
+    return { awaiting_approval: "awaiting opportunity approval", awaiting_publish_approval: "awaiting publication approval", completed: "published", rejected: "rejected", archived: "archived", blocked: "blocked", running: "running", publishing: "publishing" }[status] || status;
+  }
+  async function loadHistory(filter = "all") {
+    const list = $("#history-list");
+    if (!list) return;
+    try {
+      const response = await fetch(apiUrl("/api/agent/history"));
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || `History unavailable (${response.status})`);
+      const runs = (payload.runs || []).filter((run) => filter === "all" || (filter === "awaiting" ? ["awaiting_approval", "awaiting_publish_approval"].includes(run.status) : run.status === "completed"));
+      list.innerHTML = runs.length ? runs.map((run) => `<article class="history-card"><div><small>${escapeHtml(historyStatus(run.status))}</small><h3>${escapeHtml(run.goal)}</h3><time>${escapeHtml(formatDate(run.updated_at))}</time></div><div class="history-card-actions"><button class="quiet-button continue-run" data-run-id="${escapeHtml(run.id)}">Continue</button>${["awaiting_approval", "awaiting_publish_approval"].includes(run.status) ? `<button class="quiet-button reject-run" data-run-id="${escapeHtml(run.id)}">Reject</button>` : ""}${["rejected", "completed", "blocked", "awaiting_approval", "awaiting_publish_approval"].includes(run.status) ? `<button class="quiet-button archive-run" data-run-id="${escapeHtml(run.id)}">Archive</button>` : ""}</div></article>`).join("") : `<span class="history-empty">No campaigns in this view.</span>`;
+      list.querySelectorAll(".continue-run").forEach((button) => button.addEventListener("click", () => requestHistoryCode("continue", button.dataset.runId)));
+      list.querySelectorAll(".reject-run").forEach((button) => button.addEventListener("click", () => requestHistoryCode("reject", button.dataset.runId)));
+      list.querySelectorAll(".archive-run").forEach((button) => button.addEventListener("click", () => requestHistoryCode("archive", button.dataset.runId)));
+    } catch (error) {
+      list.innerHTML = `<span class="history-empty">${escapeHtml(error.message)}</span>`;
+    }
+  }
+  async function continueRun(runId, runCode) {
+    try {
+      const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(runId)}`), { headers: { "x-pinpilot-history-action": "true", "x-pinpilot-run-code": runCode } });
+      const run = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(run.detail || "Campaign could not be loaded");
+      state.runId = run.id;
+      state.historyRun = true;
+      state.historyRunCode = runCode;
+      renderRun(run);
+      startPolling();
+    } catch (error) { $("#run-copy").textContent = error.message; }
+  }
+  async function resumeFromQuery() {
+    const runId = new URLSearchParams(window.location.search).get("resume");
+    if (!runId) return;
+    await continueRun(runId, "");
+  }
+  async function changeRun(runId, action, runCode) {
+    try {
+      const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(runId)}/${action}`), { method: "POST", headers: { "x-pinpilot-history-action": "true", "x-pinpilot-run-code": runCode } });
+      const run = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(run.detail || `Unable to ${action} campaign`);
+      if (state.runId === runId) renderRun(run);
+      loadHistory(document.querySelector(".history-filter.active")?.dataset.filter || "all");
+    } catch (error) { $("#run-copy").textContent = error.message; }
+  }
+  let pendingHistoryAction = null;
+  function requestHistoryCode(action, runId) {
+    pendingHistoryAction = { action, runId };
     $("#run-lock").classList.remove("hidden");
     $("#run-lock-error").textContent = "";
     $("#run-lock-code").value = "";
     $("#run-lock-code").focus();
   }
-  function closeRunCode() { pendingRun = false; $("#run-lock").classList.add("hidden"); }
-  async function startRun(runCode) {
+  function closeRunCode() { pendingHistoryAction = null; $("#run-lock").classList.add("hidden"); }
+  async function startRun() {
     const button = $("#run-button");
+    state.historyRun = false;
+    state.historyRunCode = "";
     button.disabled = true;
     button.textContent = "Starting...";
     try {
-      const response = await fetch(apiUrl("/api/agent/run"), { method: "POST", headers: { "x-pinpilot-run-code": runCode } });
+      const response = await fetch(apiUrl("/api/agent/run"), { method: "POST" });
       const run = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(run.detail || run.message || `Unable to start orchestrator (${response.status})`);
       if (!run.id) { $("#configuration-note").textContent = run.message || "An active campaign already exists."; return; }
@@ -75,10 +123,18 @@ document.addEventListener("DOMContentLoaded", () => {
       button.innerHTML = "Start campaign <span>↓</span>";
     }
   }
-  $("#run-button").addEventListener("click", requestRunCode); $("#run-retry").addEventListener("click", requestRunCode); $("#new-run").addEventListener("click", requestRunCode);
+  $("#run-button").addEventListener("click", startRun); $("#run-retry").addEventListener("click", startRun); $("#new-run").addEventListener("click", startRun);
   $("#run-lock-close").addEventListener("click", closeRunCode);
   $("#run-lock").addEventListener("click", (event) => { if (event.target.id === "run-lock") closeRunCode(); });
-  $("#run-lock-form").addEventListener("submit", (event) => { event.preventDefault(); const code = $("#run-lock-code").value.trim(); if (!code) return; closeRunCode(); startRun(code); });
+  $("#run-lock-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const code = $("#run-lock-code").value.trim();
+    const pending = pendingHistoryAction;
+    if (!code || !pending) return;
+    closeRunCode();
+    if (pending.action === "continue") await continueRun(pending.runId, code);
+    else await changeRun(pending.runId, pending.action, code);
+  });
   $("#approve-opportunity").addEventListener("click", () => approve("approve-opportunity")); $("#approve-publish").addEventListener("click", () => approve("approve-publish"));
   async function approve(kind) {
     if (!state.runId) {
@@ -92,7 +148,8 @@ document.addEventListener("DOMContentLoaded", () => {
     button.textContent = "Approving...";
     const endpoint = kind === "approve-opportunity" ? "approve-opportunity" : "approve-publish";
     try {
-      const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/${endpoint}`), { method: "POST" });
+      const headers = state.historyRun ? { "x-pinpilot-history-action": "true", "x-pinpilot-run-code": state.historyRunCode || "" } : {};
+      const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/${endpoint}`), { method: "POST", headers });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.detail || payload.message || `Approval failed (${response.status})`);
@@ -112,8 +169,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   async function regenerateImage(index) { if (!state.runId) return; try { const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/regenerate-image/${index}`), { method: "POST" }); if (!response.ok) throw new Error("Image regeneration failed"); renderRun(await response.json()); startPolling(); } catch (error) { $("#run-copy").textContent = error.message; } }
   $("#schedule-button").addEventListener("click", async () => { const endpoint = state.schedule ? "stop" : "start"; const response = await fetch(apiUrl(`/api/agent/schedule/${endpoint}`), { method: "POST" }); const result = await response.json(); state.schedule = Boolean(result.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; });
+  document.querySelectorAll(".history-filter").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".history-filter").forEach((item) => item.classList.remove("active")); button.classList.add("active"); loadHistory(button.dataset.filter); }));
   async function loadRecords() { try { const response = await fetch(apiUrl("/api/products")); const data = await response.json(); const products = data.products || []; $("#metric-products").textContent = products.length; $("#metric-pins").textContent = products.reduce((sum, item) => sum + (item.pins || []).filter((pin) => pin.status === "published").length, 0); } catch (_) {} }
-  async function checkStatus() { try { const response = await fetch(apiUrl("/api/status")); const data = await response.json(); $("#connection-dot").style.background = data.status === "ok" ? "var(--green)" : "var(--amber)"; $("#connection-text").textContent = data.status === "ok" ? "SERVER CONNECTED" : "SERVER ATTENTION"; $("#configuration-note").textContent = data.agent?.campaign_mode === "trend_driven" ? `Trend-driven goal selection enabled. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.` : `Configured goal ready. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.`; state.schedule = Boolean(data.agent?.schedule?.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; } catch (_) { $("#connection-text").textContent = apiBase ? "BACKEND OFFLINE" : "FRONTEND ONLY"; $("#configuration-note").textContent = apiBase ? "The backend is unavailable." : "Set PINRIN_API_BASE to connect the autonomous backend."; } }
+  async function checkStatus() { try { const response = await fetch(apiUrl("/api/status")); const data = await response.json(); $("#connection-dot").style.background = data.status === "ok" ? "var(--green)" : "var(--amber)"; $("#connection-text").textContent = data.status === "ok" ? "SERVER CONNECTED" : "SERVER ATTENTION"; $("#configuration-note").textContent = data.agent?.campaign_mode === "trend_driven" ? `Trend-driven goal selection enabled. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.` : `Configured goal ready. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.`; state.schedule = Boolean(data.agent?.schedule?.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; loadHistory(); } catch (_) { $("#connection-text").textContent = apiBase ? "BACKEND OFFLINE" : "FRONTEND ONLY"; $("#configuration-note").textContent = apiBase ? "The backend is unavailable." : "Set PINRIN_API_BASE to connect the autonomous backend."; } }
   function initCharacter() {
     const target = $("#guide-canvas");
     if (!target || !window.THREE) return;
@@ -514,5 +572,5 @@ document.addEventListener("DOMContentLoaded", () => {
     }).observe(target);
   }
   function escapeHtml(value) { return String(value || "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char])); }
-  initCharacter(); checkStatus(); updatePresenter("IDLE", "Awaiting start");
+  initCharacter(); checkStatus(); updatePresenter("IDLE", "Awaiting start"); resumeFromQuery();
 });

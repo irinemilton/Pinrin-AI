@@ -131,6 +131,13 @@ window.PINRIN_API_BASE = "https://your-api.example.com";
 
 Leave it as an empty string for a visual frontend-only deployment. Never put API keys in this file.
 
+### Persistent campaign database
+
+The backend uses local SQLite when `DATABASE_URL` is empty. For a deployed Render service, set
+`DATABASE_URL` to a Neon PostgreSQL connection string (`sslmode=require`) so campaign runs,
+approvals, events, and artifact metadata survive service restarts. Dropbox remains the storage
+location for generated images and product files; those binaries are not stored in PostgreSQL.
+
 ## Autonomous campaign storage and approval
 
 When the autonomous workflow generates a product, PinPilot stores the product files and each generated Pin under the configured Dropbox App Folder:

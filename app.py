@@ -65,6 +65,13 @@ def current_user(request: Request) -> str:
     return request.headers.get("x-pinrin-user", "default")[:120]
 
 
+def history_authorized(request: Request) -> None:
+    if request.headers.get("x-pinpilot-history-action") != "true":
+        return
+    if ORCHESTRATOR_RUN_CODE and request.headers.get("x-pinpilot-run-code") != ORCHESTRATOR_RUN_CODE:
+        raise HTTPException(status_code=403, detail="History action requires the private run code")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     html_path = BASE_DIR / "static" / "index.html"
@@ -99,15 +106,42 @@ async def api_status():
 @app.post("/api/agent/run")
 async def start_agent_run(request: Request):
     """Start an autonomous run using server configuration only."""
-    current_user(request)
-    if ORCHESTRATOR_RUN_CODE and request.headers.get("x-pinpilot-run-code") != ORCHESTRATOR_RUN_CODE:
-        raise HTTPException(status_code=403, detail="Only Irine Milton can run this orchestrator")
-    return orchestrator.start(request.headers.get("x-pinrin-user", "default")[:120])
+    return orchestrator.start(current_user(request))
 
 
 @app.get("/api/agent/runs/{run_id}")
 async def get_agent_run(run_id: str, request: Request):
+    history_authorized(request)
     run = orchestrator.store.get(run_id, current_user(request))
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run
+
+
+@app.get("/api/agent/history")
+async def get_agent_history(request: Request):
+    return {"runs": orchestrator.history(current_user(request))}
+
+
+@app.post("/api/agent/runs/{run_id}/reject")
+async def reject_agent_run(run_id: str, request: Request):
+    history_authorized(request)
+    try:
+        run = orchestrator.set_run_status(run_id, "rejected", current_user(request))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run
+
+
+@app.post("/api/agent/runs/{run_id}/archive")
+async def archive_agent_run(run_id: str, request: Request):
+    history_authorized(request)
+    try:
+        run = orchestrator.set_run_status(run_id, "archived", current_user(request))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")
     return run
@@ -115,6 +149,7 @@ async def get_agent_run(run_id: str, request: Request):
 
 @app.post("/api/agent/runs/{run_id}/approve-opportunity")
 async def approve_agent_opportunity(run_id: str, request: Request):
+    history_authorized(request)
     run = orchestrator.approve_opportunity(run_id, current_user(request))
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")
@@ -123,6 +158,7 @@ async def approve_agent_opportunity(run_id: str, request: Request):
 
 @app.post("/api/agent/runs/{run_id}/approve-publish")
 async def approve_agent_publish(run_id: str, request: Request):
+    history_authorized(request)
     run = orchestrator.approve_publish(run_id, current_user(request))
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import hashlib
 import logging
+import os
 import sqlite3
 import threading
 import uuid
@@ -29,13 +30,38 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class _DatabaseSession:
+    def __init__(self, connection: Any, postgres: bool):
+        self.connection = connection
+        self.postgres = postgres
+
+    def execute(self, query: str, parameters: Any = ()) -> Any:
+        if self.postgres:
+            query = query.replace("?", "%s")
+        return self.connection.execute(query, parameters)
+
+    def executescript(self, script: str) -> None:
+        for statement in script.split(";"):
+            statement = statement.strip()
+            if statement:
+                self.execute(statement)
+
+
 class RunStore:
     def __init__(self, path: Path = RUNS_PATH):
         self.path = path
+        self.database_url = os.getenv("DATABASE_URL", "").strip()
         self.lock = threading.RLock()
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self):
+        if self.database_url:
+            try:
+                import psycopg
+                from psycopg.rows import dict_row
+            except ImportError as exc:
+                raise RuntimeError("DATABASE_URL is set but psycopg is not installed") from exc
+            return psycopg.connect(self.database_url, row_factory=dict_row)
         connection = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
@@ -45,7 +71,7 @@ class RunStore:
     def _session(self):
         connection = self._connect()
         try:
-            yield connection
+            yield _DatabaseSession(connection, bool(self.database_url))
             connection.commit()
         except Exception:
             connection.rollback()
@@ -55,14 +81,14 @@ class RunStore:
 
     def _init_db(self) -> None:
         with self._session() as db:
-            db.executescript("""
+            schema = """
                 CREATE TABLE IF NOT EXISTS runs (
                     id TEXT PRIMARY KEY, user_id TEXT NOT NULL, goal TEXT NOT NULL,
                     status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
                     approval_required INTEGER NOT NULL DEFAULT 0, artifacts TEXT NOT NULL DEFAULT '{}', error TEXT
                 );
                 CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, agent TEXT NOT NULL,
+                    id {event_id}, run_id TEXT NOT NULL, agent TEXT NOT NULL,
                     status TEXT NOT NULL, summary TEXT NOT NULL, data TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS agent_states (
@@ -72,10 +98,13 @@ class RunStore:
                 CREATE TABLE IF NOT EXISTS locks (run_id TEXT PRIMARY KEY, owner TEXT NOT NULL, acquired_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY CHECK(id=1), running INTEGER NOT NULL, interval_hours INTEGER NOT NULL, updated_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS artifacts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, path TEXT NOT NULL,
+                    id {artifact_id}, run_id TEXT NOT NULL, path TEXT NOT NULL,
                     kind TEXT NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL
                 );
-            """)
+            """
+            auto_id = "SERIAL PRIMARY KEY" if self.database_url else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            schema = schema.replace("{event_id}", auto_id).replace("{artifact_id}", auto_id)
+            db.executescript(schema)
 
     def create(self, goal: str, user_id: str = "default") -> dict[str, Any]:
         run_id = f"campaign_{uuid.uuid4().hex[:10]}"
@@ -102,6 +131,26 @@ class RunStore:
             checksums = [dict(item) for item in db.execute("SELECT path,kind,sha256,created_at FROM artifacts WHERE run_id=? ORDER BY id", (run_id,)).fetchall()]
             return {"id": row["id"], "user_id": row["user_id"], "goal": row["goal"], "status": row["status"], "created_at": row["created_at"], "updated_at": row["updated_at"], "events": events, "agents": agents, "approval_required": bool(row["approval_required"]), "artifacts": json.loads(row["artifacts"] or "{}"), "artifact_checksums": checksums, "error": row["error"]}
 
+    def list_runs(self, user_id: str = "default", limit: int = 50) -> list[dict[str, Any]]:
+        with self.lock, self._session() as db:
+            rows = db.execute(
+                "SELECT id,goal,status,created_at,updated_at,approval_required,error FROM runs "
+                "WHERE user_id=? ORDER BY updated_at DESC LIMIT ?",
+                (user_id, max(1, min(limit, 100))),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "goal": row["goal"],
+                "status": row["status"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "approval_required": bool(row["approval_required"]),
+                "error": row["error"],
+            }
+            for row in rows
+        ]
+
     def update(self, run_id: str, **changes: Any) -> None:
         allowed = {"goal", "status", "approval_required", "artifacts", "error"}
         fields = [(key, json.dumps(value) if key == "artifacts" else int(value) if key == "approval_required" else value) for key, value in changes.items() if key in allowed]
@@ -123,7 +172,9 @@ class RunStore:
             with self.lock, self._session() as db:
                 db.execute("INSERT INTO locks(run_id,owner,acquired_at) VALUES(?,?,?)", (run_id, owner, now()))
             return True
-        except sqlite3.IntegrityError:
+        except Exception as exc:
+            if not isinstance(exc, sqlite3.IntegrityError) and exc.__class__.__name__ != "UniqueViolation":
+                raise
             return False
 
     def release(self, run_id: str, owner: str) -> None:
@@ -166,6 +217,23 @@ class Orchestrator:
         thread = threading.Thread(target=self._execute, args=(run["id"],), daemon=True)
         thread.start()
         return run
+
+    def history(self, user_id: str = "default", limit: int = 50) -> list[dict[str, Any]]:
+        return self.store.list_runs(user_id, limit)
+
+    def set_run_status(self, run_id: str, status: str, user_id: str = "default") -> dict[str, Any] | None:
+        run = self.store.get(run_id, user_id)
+        if not run:
+            return None
+        allowed = {
+            "rejected": {"awaiting_approval", "awaiting_publish_approval"},
+            "archived": {"rejected", "completed", "blocked", "awaiting_approval", "awaiting_publish_approval"},
+        }
+        if status not in allowed or run["status"] not in allowed[status]:
+            raise ValueError(f"Cannot mark {run['status']} as {status}")
+        self.store.update(run_id, status=status, approval_required=False)
+        self._emit(run_id, "operator", status, f"Campaign marked {status}.", {"status": status})
+        return self.store.get(run_id, user_id)
 
     def _emit(self, run_id: str, agent: str, status: str, summary: str, data: dict[str, Any] | None = None) -> None:
         self.store.event(run_id, agent, status, summary, data)
