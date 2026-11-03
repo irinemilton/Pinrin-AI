@@ -20,6 +20,25 @@ document.addEventListener("DOMContentLoaded", () => {
     (run.events || []).forEach((event) => { const id = { trend_scout: "trend-status", opportunity_analyst: "opportunity-status", product_builder: "builder-status", marketing_assistant: "marketing-status", commerce_agent: "commerce-status", performance_analyst: "performance-status" }[event.agent]; if (id) setLine(id, event); if (event.agent === "pinterest_adapter") setLine("pin-status", event); });
     const latestAgentScene = agentScene[run.events?.at(-1)?.agent]; const scene = run.status === "awaiting_approval" || run.status === "awaiting_publish_approval" ? "approval" : latestAgentScene || sceneFor[run.status] || "run"; if (scene !== state.currentScene) { state.currentScene = scene; scrollTo(scene); }
     $("#approve-opportunity").classList.toggle("hidden", status !== "awaiting_approval"); $("#approve-publish").classList.toggle("hidden", status !== "awaiting_publish_approval");
+    const opportunityCard = $("#opportunity-card");
+    const ideas = run.artifacts?.opportunities?.ideas || [];
+    const idea = ideas[0] || {};
+    if (opportunityCard && idea.name) {
+      opportunityCard.classList.remove("hidden");
+      $("#opportunity-name").textContent = idea.name;
+      $("#opportunity-promise").textContent = idea.promise || idea.problem || "Opportunity selected from current trend evidence.";
+      $("#opportunity-audience").textContent = idea.audience ? `Audience: ${idea.audience}` : "Audience: not specified";
+      const observations = (run.artifacts?.trends?.observations || []).slice(0, 5);
+      $("#trend-evidence").innerHTML = observations.map((item) => `<span>${escapeHtml(item.keyword || "Trend signal")}</span>`).join("");
+    } else if (opportunityCard) {
+      opportunityCard.classList.add("hidden");
+    }
+    const gallery = $("#image-gallery");
+    if (gallery) {
+      const images = run.artifacts?.generated_images || [];
+      gallery.innerHTML = images.map((_, index) => `<figure><img src="${apiUrl(`/api/agent/runs/${encodeURIComponent(run.id)}/images/${index}`)}" alt="Generated Pin ${index + 1}"><figcaption>Pin ${index + 1} <button class="quiet-button regenerate-image" data-index="${index}" ${status === "regenerating" ? "disabled" : ""}>Regenerate</button></figcaption></figure>`).join("");
+      gallery.querySelectorAll(".regenerate-image").forEach((button) => button.addEventListener("click", () => regenerateImage(Number(button.dataset.index))));
+    }
     $("#approval-headline").textContent = status === "awaiting_publish_approval" ? "The product is ready to publish." : "The system will pause for your approval.";
     $("#approval-copy").textContent = status === "awaiting_publish_approval" ? "Review the generated product and marketing queue in the server run record, then authorize external publication." : "The opportunity recommendation is waiting for your approval before product and marketing agents run.";
     if (status === "completed") { const publication = run.artifacts?.publication; $("#publication-result").innerHTML = publication ? `Verified product: ${publication.product_url ? `<a href="${escapeHtml(publication.product_url)}" target="_blank" rel="noopener">open URL</a>` : "no URL"}. Pins: ${publication.pins?.length || 0}.` : "Completed without a publication artifact."; loadRecords(); stopPolling(); }
@@ -32,9 +51,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#run-button").addEventListener("click", startRun); $("#run-retry").addEventListener("click", startRun); $("#new-run").addEventListener("click", startRun);
   $("#approve-opportunity").addEventListener("click", () => approve("approve-opportunity")); $("#approve-publish").addEventListener("click", () => approve("approve-publish"));
   async function approve(kind) { if (!state.runId) return; const button = $(`#${kind}`); button.disabled = true; const endpoint = kind === "approve-opportunity" ? "approve-opportunity" : "approve-publish"; try { const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/${endpoint}`), { method: "POST" }); renderRun(await response.json()); startPolling(); } finally { button.disabled = false; } }
+  async function regenerateImage(index) { if (!state.runId) return; try { const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/regenerate-image/${index}`), { method: "POST" }); if (!response.ok) throw new Error("Image regeneration failed"); renderRun(await response.json()); startPolling(); } catch (error) { $("#run-copy").textContent = error.message; } }
   $("#schedule-button").addEventListener("click", async () => { const endpoint = state.schedule ? "stop" : "start"; const response = await fetch(apiUrl(`/api/agent/schedule/${endpoint}`), { method: "POST" }); const result = await response.json(); state.schedule = Boolean(result.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; });
   async function loadRecords() { try { const response = await fetch(apiUrl("/api/products")); const data = await response.json(); const products = data.products || []; $("#metric-products").textContent = products.length; $("#metric-pins").textContent = products.reduce((sum, item) => sum + (item.pins || []).filter((pin) => pin.status === "published").length, 0); } catch (_) {} }
-  async function checkStatus() { try { const response = await fetch(apiUrl("/api/status")); const data = await response.json(); $("#connection-dot").style.background = data.status === "ok" ? "var(--green)" : "var(--amber)"; $("#connection-text").textContent = data.status === "ok" ? "SERVER CONNECTED" : "SERVER ATTENTION"; $("#configuration-note").textContent = data.agent?.campaign_configured ? `Configured goal ready. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.` : "No AGENT_CAMPAIGN_GOAL configured on the server."; state.schedule = Boolean(data.agent?.schedule?.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; } catch (_) { $("#connection-text").textContent = apiBase ? "BACKEND OFFLINE" : "FRONTEND ONLY"; $("#configuration-note").textContent = apiBase ? "The backend is unavailable." : "Set PINRIN_API_BASE to connect the autonomous backend."; } }
+  async function checkStatus() { try { const response = await fetch(apiUrl("/api/status")); const data = await response.json(); $("#connection-dot").style.background = data.status === "ok" ? "var(--green)" : "var(--amber)"; $("#connection-text").textContent = data.status === "ok" ? "SERVER CONNECTED" : "SERVER ATTENTION"; $("#configuration-note").textContent = data.agent?.campaign_mode === "trend_driven" ? `Trend-driven goal selection enabled. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.` : `Configured goal ready. Hugging Face: ${data.agent.huggingface_configured ? "available" : "unavailable"}.`; state.schedule = Boolean(data.agent?.schedule?.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; } catch (_) { $("#connection-text").textContent = apiBase ? "BACKEND OFFLINE" : "FRONTEND ONLY"; $("#configuration-note").textContent = apiBase ? "The backend is unavailable." : "Set PINRIN_API_BASE to connect the autonomous backend."; } }
   function initCharacter() {
     const target = $("#guide-canvas");
     if (!target || !window.THREE) return;

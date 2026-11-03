@@ -87,6 +87,7 @@ async def api_status():
         "pinterest_configured": config.pinterest.is_configured,
         "agent": {
             "campaign_configured": bool(config.agent.campaign_goal),
+            "campaign_mode": "configured" if config.agent.campaign_goal else "trend_driven",
             "huggingface_configured": HuggingFaceAdapter(config).configured,
             "schedule": orchestrator.schedule_status(),
             "auth_required": bool(PINRIN_API_KEY),
@@ -122,6 +123,31 @@ async def approve_agent_publish(run_id: str, request: Request):
     if not run:
         raise HTTPException(status_code=404, detail="Agent run not found")
     return run
+
+
+@app.post("/api/agent/runs/{run_id}/regenerate-image/{image_index}")
+async def regenerate_agent_image(run_id: str, image_index: int, request: Request):
+    try:
+        run = orchestrator.regenerate_image(run_id, image_index, current_user(request))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run
+
+
+@app.get("/api/agent/runs/{run_id}/images/{image_index}")
+async def get_agent_image(run_id: str, image_index: int, request: Request):
+    run = orchestrator.store.get(run_id, current_user(request))
+    if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    images = run.get("artifacts", {}).get("generated_images", [])
+    if image_index < 0 or image_index >= len(images):
+        raise HTTPException(status_code=404, detail="Image not found")
+    image_path = Path(images[image_index])
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="Image file not found")
+    return FileResponse(image_path)
 
 
 @app.post("/api/agent/schedule/start")

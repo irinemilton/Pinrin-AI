@@ -15,8 +15,10 @@ from typing import Any
 from .agents import AgentBlocked, AgentSuite
 from .artifacts import render_product_files, validate_product_files
 from .config import Config
+from .dropbox_client import DropboxClient
 from .gumroad_client import GumroadClient
 from .pinterest_client import PinterestClient
+from .recovery import RecoveryController
 from .tracker import PublishRecord, PublishTracker
 
 logger = logging.getLogger("pinpilot.orchestrator")
@@ -101,7 +103,7 @@ class RunStore:
             return {"id": row["id"], "user_id": row["user_id"], "goal": row["goal"], "status": row["status"], "created_at": row["created_at"], "updated_at": row["updated_at"], "events": events, "agents": agents, "approval_required": bool(row["approval_required"]), "artifacts": json.loads(row["artifacts"] or "{}"), "artifact_checksums": checksums, "error": row["error"]}
 
     def update(self, run_id: str, **changes: Any) -> None:
-        allowed = {"status", "approval_required", "artifacts", "error"}
+        allowed = {"goal", "status", "approval_required", "artifacts", "error"}
         fields = [(key, json.dumps(value) if key == "artifacts" else int(value) if key == "approval_required" else value) for key, value in changes.items() if key in allowed]
         if not fields:
             return
@@ -154,7 +156,7 @@ class Orchestrator:
         self.scheduler_thread: threading.Thread | None = None
 
     def start(self, user_id: str = "default") -> dict[str, Any]:
-        goal = self.config.agent.campaign_goal.strip()
+        goal = self.config.agent.campaign_goal.strip() or "Discover and develop a digital product opportunity from the current Pinterest trends."
         if self.store.has_active(user_id):
             return {"status": "already_running", "message": "An active campaign already exists for this user."}
         run = self.store.create(goal, user_id)
@@ -174,10 +176,19 @@ class Orchestrator:
         for attempt in range(attempts):
             try:
                 return operation()
-            except AgentBlocked:
-                raise
+            except AgentBlocked as exc:
+                decision = RecoveryController.decide(exc, attempt, attempts)
+                self._emit(run_id, agent, "recovery", decision.reason, {"action": decision.action, "approval_required": decision.approval_required})
+                if decision.approval_required:
+                    raise AgentBlocked(f"{agent} recovery requires approval: {decision.reason}") from exc
+                if decision.action == "stop":
+                    raise
             except Exception as exc:
-                if attempt >= attempts - 1:
+                decision = RecoveryController.decide(exc, attempt, attempts)
+                self._emit(run_id, agent, "recovery", decision.reason, {"action": decision.action, "approval_required": decision.approval_required})
+                if decision.approval_required:
+                    raise AgentBlocked(f"{agent} recovery requires approval: {decision.reason}") from exc
+                if decision.action == "stop" or attempt >= attempts - 1:
                     raise
                 self._emit(run_id, agent, "retrying", f"Transient failure; retry {attempt + 1} of {attempts - 1}.", {"error": str(exc)})
 
@@ -193,6 +204,10 @@ class Orchestrator:
         try:
             trends = self._retry(run_id, "trend_scout", lambda: suite.run_trend_scout(run["goal"]))
             opportunities = self._retry(run_id, "opportunity_analyst", lambda: suite.run_opportunity_analyst(run["goal"], trends))
+            goal = self._goal_from_opportunity(opportunities, run["goal"])
+            if goal != run["goal"]:
+                self.store.update(run_id, goal=goal)
+                self._emit(run_id, "opportunity_analyst", "completed", "Campaign goal derived from the current trend opportunity.", {"campaign_goal": goal})
             self.store.update(run_id, status="awaiting_approval", approval_required=True, artifacts={"trends": trends, "opportunities": opportunities})
         except AgentBlocked as exc:
             self._blocked(run_id, str(exc))
@@ -201,6 +216,19 @@ class Orchestrator:
             self._blocked(run_id, f"Orchestrator failure: {exc}")
         finally:
             self.store.release(run_id, owner)
+
+    @staticmethod
+    def _goal_from_opportunity(opportunities: dict[str, Any], fallback: str) -> str:
+        ideas = opportunities.get("ideas", []) if isinstance(opportunities, dict) else []
+        idea = ideas[0] if ideas and isinstance(ideas[0], dict) else {}
+        audience = str(idea.get("audience", "")).strip()
+        promise = str(idea.get("promise", "")).strip()
+        name = str(idea.get("name", "")).strip()
+        if not (audience or promise or name):
+            return fallback
+        focus = promise or name or "a practical digital product"
+        target = f" for {audience}" if audience else ""
+        return f"Create and market {focus}{target}."
 
     def approve_opportunity(self, run_id: str, user_id: str = "default") -> dict[str, Any] | None:
         run = self.store.get(run_id, user_id)
@@ -220,6 +248,10 @@ class Orchestrator:
             opportunity = run["artifacts"].get("opportunities", {})
             trends = run["artifacts"].get("trends", {})
             product = self._retry(run_id, "product_builder", lambda: suite.run_product_builder(run["goal"], opportunity))
+            price = self._normalise_product_price(product)
+            if price is None:
+                raise AgentBlocked("The Product Builder must choose a price from $1.00 to $3.00")
+            product["price"] = price
             product_dir = Path("artifacts") / run_id
             if product.get("status") == "source_supplied":
                 product["files"] = [{"path": product["file"], "kind": "supplied_product"}]
@@ -244,12 +276,60 @@ class Orchestrator:
                 raise AgentBlocked("Product quality checks failed; review the generated files before publishing")
             product["checksums"] = [self.store.record_artifact(run_id, Path(item["path"]), item["kind"]) for item in product.get("files", [])]
             product["checksums"].extend(self.store.record_artifact(run_id, Path(path), "generated_pin") for path in product.get("generated_images", []))
+            product["storage"] = self._sync_campaign_to_dropbox(run_id, product, product.get("generated_images", []))
             self.store.update(run_id, status="awaiting_publish_approval", approval_required=True, artifacts={**run["artifacts"], "product": product, "marketing": marketing, "generated_images": product.get("generated_images", [])})
         except AgentBlocked as exc:
             self._blocked(run_id, str(exc))
         except Exception as exc:
             logger.exception("Campaign %s failed after opportunity approval", run_id)
             self._blocked(run_id, f"Orchestrator failure: {exc}")
+
+    def _sync_campaign_to_dropbox(self, run_id: str, product: dict[str, Any], images: list[str]) -> dict[str, Any]:
+        if not self.config.dropbox.is_configured:
+            return {"status": "not_configured", "files": []}
+        client = DropboxClient(self.config.dropbox)
+        root = f"{self.config.dropbox.products_path.rstrip('/')}/{run_id}"
+        uploaded: list[dict[str, str]] = []
+        for item in product.get("files", []):
+            local = Path(item["path"])
+            uploaded.append({"local": str(local), "dropbox": client.upload_file(local, f"{root}/product/{local.name}")})
+        for index, image in enumerate(images, 1):
+            local = Path(image)
+            uploaded.append({"local": str(local), "dropbox": client.upload_file(local, f"{root}/pin-{index}/{local.name}")})
+        return {"status": "synced", "root": root, "files": uploaded}
+
+    def regenerate_image(self, run_id: str, image_index: int, user_id: str = "default") -> dict[str, Any] | None:
+        run = self.store.get(run_id, user_id)
+        if not run or run["status"] != "awaiting_publish_approval":
+            return run
+        images = run.get("artifacts", {}).get("generated_images", [])
+        marketing = run.get("artifacts", {}).get("marketing", {})
+        product = run.get("artifacts", {}).get("product", {})
+        if image_index < 0 or image_index >= len(images):
+            raise ValueError("Image index is out of range")
+        self.store.update(run_id, status="regenerating", approval_required=True)
+        thread = threading.Thread(target=self._regenerate_image, args=(run_id, image_index), daemon=True)
+        thread.start()
+        return self.store.get(run_id, user_id)
+
+    def _regenerate_image(self, run_id: str, image_index: int) -> None:
+        run = self.store.get(run_id)
+        if not run:
+            return
+        try:
+            suite = AgentSuite(self.config, self.tracker, lambda agent, status, summary, data: self._emit(run_id, agent, status, summary, data))
+            product = run["artifacts"]["product"]
+            marketing = run["artifacts"]["marketing"]
+            trends = run["artifacts"].get("trends", {})
+            output = self._retry(run_id, "image_generator", lambda: suite.run_image_generation(run["goal"], product, marketing, Path("artifacts") / run_id, trends, image_index))
+            images = list(run["artifacts"].get("generated_images", []))
+            images[image_index] = output["images"][0]["path"]
+            product["generated_images"] = images
+            product["storage"] = self._sync_campaign_to_dropbox(run_id, product, images)
+            self.store.update(run_id, status="awaiting_publish_approval", approval_required=True, artifacts={**run["artifacts"], "product": product, "generated_images": images})
+        except Exception as exc:
+            logger.exception("Image regeneration failed for campaign %s", run_id)
+            self._blocked(run_id, f"Image regeneration failed: {exc}")
 
     def approve_publish(self, run_id: str, user_id: str = "default") -> dict[str, Any] | None:
         run = self.store.get(run_id, user_id)
@@ -280,9 +360,10 @@ class Orchestrator:
                 raise AgentBlocked("GUMROAD_ACCESS_TOKEN is required for server-side product creation")
             gumroad = GumroadClient(self.config.gumroad)
             title = self.config.agent.product_title or product_file.stem.replace("_", " ").title()
-            if self.config.agent.price <= 0:
-                raise AgentBlocked("AGENT_PRICE must be greater than zero for Gumroad publication")
-            product = gumroad.create_product(name=title, description=run["goal"], price=self.config.agent.price, product_file=str(product_file))
+            price = self._product_price(run.get("artifacts", {}).get("product", {}))
+            if price is None:
+                raise AgentBlocked("The Product Builder must choose a price from $1.00 to $3.00 before publication")
+            product = gumroad.create_product(name=title, description=run["goal"], price=price, product_file=str(product_file))
             self._emit(run_id, "commerce_agent", "completed", "Gumroad returned a product URL.", {"product_id": product.id, "product_url": product.url})
             pins: list[dict[str, Any]] = []
             if not self.config.pinterest.is_configured:
@@ -299,6 +380,15 @@ class Orchestrator:
                     raise AgentBlocked(f"Pinterest publication failed: {result.error}")
                 pins.append({"pin_id": result.pin_id, "pin_url": result.pin_url, "image": str(image), "published_at": now()})
                 self.tracker.record(PublishRecord(dedup_key=f"{run_id}|{image.name}", product_name=title, pin_id=result.pin_id or "", pin_url=result.pin_url or "", pin_title=title, gumroad_url=product.url, image_path=str(image), board_id=self.config.pinterest.board_id, user_id=run.get("user_id", "default")))
+                storage = run.get("artifacts", {}).get("product", {}).get("storage", {})
+                if storage.get("status") == "synced" and self.config.dropbox.is_configured:
+                    dropbox = DropboxClient(self.config.dropbox)
+                    source = f"{self.config.dropbox.products_path.rstrip('/')}/{run_id}/pin-{index + 1}"
+                    destination = f"{self.config.dropbox.published_path.rstrip('/')}/{run_id}/pin-{index + 1}"
+                    try:
+                        dropbox.copy_to_published(source, destination)
+                    except Exception as exc:
+                        logger.warning("Dropbox archive failed for Pin %s: %s", index + 1, exc)
             self._emit(run_id, "commerce_agent", "completed", "Pinterest returned verified Pin results.", {"pins": pins})
             suite = AgentSuite(self.config, self.tracker, lambda agent, status, summary, data: self._emit(run_id, agent, status, summary, data))
             performance = self._retry(run_id, "performance_analyst", suite.run_performance_analyst)
@@ -308,6 +398,23 @@ class Orchestrator:
         except Exception as exc:
             logger.exception("Campaign %s publish failed", run_id)
             self._blocked(run_id, f"Publishing failure: {exc}")
+
+    @staticmethod
+    def _normalise_product_price(product: dict[str, Any]) -> float | None:
+        if not isinstance(product, dict):
+            return None
+        try:
+            price = float(product.get("price"))
+        except (TypeError, ValueError):
+            return None
+        if not 1 <= price <= 3:
+            return None
+        return round(price, 2)
+
+    @classmethod
+    def _product_price(cls, product: dict[str, Any]) -> int | None:
+        price = cls._normalise_product_price(product)
+        return round(price * 100) if price is not None else None
 
     def _blocked(self, run_id: str, message: str) -> None:
         self._emit(run_id, "orchestrator", "blocked", message, None)

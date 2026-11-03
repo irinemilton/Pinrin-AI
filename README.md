@@ -130,3 +130,16 @@ window.PINRIN_API_BASE = "https://your-api.example.com";
 ```
 
 Leave it as an empty string for a visual frontend-only deployment. Never put API keys in this file.
+
+## Autonomous campaign storage and approval
+
+When the autonomous workflow generates a product, PinPilot stores the product files and each generated Pin under the configured Dropbox App Folder:
+
+```text
+/products/<campaign-id>/product/
+/products/<campaign-id>/pin-1/
+/products/<campaign-id>/pin-2/
+/published/<campaign-id>/pin-1/
+```
+
+The web UI shows generated images at the publication approval stage. Use **Regenerate** on any image that needs changes; the image agent replaces it and the campaign returns to approval. Nothing is sent to Gumroad or Pinterest until publication is explicitly approved. Keep `PINTEREST_SANDBOX=true` while testing.

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import dropbox
-from dropbox.files import FileMetadata, FolderMetadata
+from dropbox.files import FileMetadata, FolderMetadata, WriteMode
 from dropbox.exceptions import ApiError
 
 from .config import DropboxConfig
@@ -255,6 +255,27 @@ class DropboxClient:
         except ApiError as e:
             logger.error(f"Failed to move {folder_path}: {e}")
             return None
+
+    def upload_file(self, local_path: str | Path, dropbox_path: str) -> str:
+        """Upload a local artifact, replacing an existing file at that path."""
+        path = str(dropbox_path).replace("\\", "/")
+        if not path.startswith("/"):
+            path = "/" + path
+        with Path(local_path).open("rb") as source:
+            metadata = self.dbx.files_upload(source.read(), path, mode=WriteMode.overwrite)
+        return metadata.path_display
+
+    def copy_to_published(self, source_path: str, destination_path: str) -> str:
+        """Copy an approved product or Pin folder into the published tree."""
+        destination = destination_path.replace("\\", "/")
+        if not destination.startswith("/"):
+            destination = "/" + destination
+        try:
+            self.dbx.files_create_folder_v2(str(Path(destination).parent).replace("\\", "/"))
+        except ApiError:
+            pass
+        metadata = self.dbx.files_copy_v2(source_path, destination).metadata
+        return metadata.path_display
 
     def get_temporary_link(self, file_path: str) -> str | None:
         """Get a temporary download link for a file (valid for 4 hours).

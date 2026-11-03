@@ -79,6 +79,9 @@ class AgentConfig:
     price: int = 0
     model: str = "gpt-4.1-mini"
     provider: str = "huggingface"
+    openrouter_token: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "openai/gpt-4o-mini"
     novita_token: str = ""
     novita_base_url: str = "https://api.novita.ai/v3/openai"
     novita_model: str = "deepseek/deepseek-v4.1-flash-1017"
@@ -175,6 +178,9 @@ class Config:
                 model=os.getenv("HUGGINGFACE_TEXT_MODEL", "Qwen/Qwen2.5-72B-Instruct"),
                 huggingface_token=huggingface_token,
                 provider=os.getenv("AGENT_LLM_PROVIDER", "huggingface").lower(),
+                openrouter_token=os.getenv("OPENROUTER_API_KEY", ""),
+                openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/"),
+                openrouter_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
                 novita_token=os.getenv("NOVITA_API_KEY", ""),
                 novita_base_url=os.getenv("NOVITA_BASE_URL", "https://api.novita.ai/v3/openai").rstrip("/"),
                 novita_model=os.getenv("NOVITA_TEXT_MODEL", "deepseek/deepseek-v4.1-flash-1017"),
@@ -225,8 +231,10 @@ class Config:
             issues.append("ℹ️  Pinterest sandbox mode is ON — Pins won't be publicly visible")
 
         if not self.agent.campaign_goal:
-            issues.append("⚠️  AGENT_CAMPAIGN_GOAL not set — autonomous runs need a configured goal")
-        if self.agent.provider == "novita" and not self.agent.novita_token:
+            issues.append("ℹ️  AGENT_CAMPAIGN_GOAL not set — the Opportunity Analyst will derive each run's goal from current trends")
+        if self.agent.provider == "openrouter" and not self.agent.openrouter_token:
+            issues.append("⚠️  OPENROUTER_API_KEY not set — model-backed agents cannot run")
+        elif self.agent.provider == "novita" and not self.agent.novita_token:
             issues.append("⚠️  NOVITA_API_KEY not set — model-backed agents cannot run")
         elif self.agent.provider != "novita" and not self.agent.huggingface_token:
             issues.append("⚠️  HUGGINGFACE_API_TOKEN not set — model-backed agents cannot run")
@@ -235,6 +243,6 @@ class Config:
         if not self.agent.pin_images:
             issues.append("ℹ️  AGENT_PIN_IMAGES not set — Marketing Assistant and Image Generator will create creatives")
         if self.agent.price <= 0:
-            issues.append("⚠️  AGENT_PRICE must be greater than zero for Gumroad publication")
+            issues.append("ℹ️  Product Builder will choose a price from $1.00 to $3.00 for each generated product")
 
         return issues
