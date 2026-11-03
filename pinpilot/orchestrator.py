@@ -250,7 +250,14 @@ class Orchestrator:
             product = self._retry(run_id, "product_builder", lambda: suite.run_product_builder(run["goal"], opportunity))
             price = self._normalise_product_price(product)
             if price is None:
-                raise AgentBlocked("The Product Builder must choose a price from $1.00 to $3.00")
+                price = self._default_product_price()
+                self._emit(
+                    run_id,
+                    "recovery",
+                    "repaired",
+                    "Product price was missing or outside the allowed range; a safe default was applied.",
+                    {"action": "repair", "price": price},
+                )
             product["price"] = price
             product_dir = Path("artifacts") / run_id
             if product.get("status") == "source_supplied":
@@ -410,6 +417,10 @@ class Orchestrator:
         if not 1 <= price <= 3:
             return None
         return round(price, 2)
+
+    def _default_product_price(self) -> float:
+        configured = self._normalise_product_price({"price": self.config.agent.price})
+        return configured if configured is not None else 1.00
 
     @classmethod
     def _product_price(cls, product: dict[str, Any]) -> int | None:

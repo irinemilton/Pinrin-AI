@@ -47,10 +47,69 @@ document.addEventListener("DOMContentLoaded", () => {
   async function poll() { if (!state.runId) return; try { const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}`)); if (!response.ok) throw new Error("Run not found"); renderRun(await response.json()); } catch (error) { $("#run-copy").textContent = error.message; } }
   function startPolling() { stopPolling(); state.timer = window.setInterval(poll, 1600); poll(); }
   function stopPolling() { if (state.timer) window.clearInterval(state.timer); state.timer = null; }
-  async function startRun() { const button = $("#run-button"); button.disabled = true; button.textContent = "Starting..."; try { const response = await fetch(apiUrl("/api/agent/run"), { method: "POST" }); const run = await response.json(); if (!run.id) { $("#configuration-note").textContent = run.message || "An active campaign already exists."; return; } state.runId = run.id; renderRun(run); startPolling(); } catch (error) { updatePresenter("BLOCKED", error.message); } finally { button.disabled = false; button.innerHTML = "Start campaign <span>↓</span>"; } }
-  $("#run-button").addEventListener("click", startRun); $("#run-retry").addEventListener("click", startRun); $("#new-run").addEventListener("click", startRun);
+  let pendingRun = false;
+  function requestRunCode() {
+    pendingRun = true;
+    $("#run-lock").classList.remove("hidden");
+    $("#run-lock-error").textContent = "";
+    $("#run-lock-code").value = "";
+    $("#run-lock-code").focus();
+  }
+  function closeRunCode() { pendingRun = false; $("#run-lock").classList.add("hidden"); }
+  async function startRun(runCode) {
+    const button = $("#run-button");
+    button.disabled = true;
+    button.textContent = "Starting...";
+    try {
+      const response = await fetch(apiUrl("/api/agent/run"), { method: "POST", headers: { "x-pinpilot-run-code": runCode } });
+      const run = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(run.detail || run.message || `Unable to start orchestrator (${response.status})`);
+      if (!run.id) { $("#configuration-note").textContent = run.message || "An active campaign already exists."; return; }
+      state.runId = run.id;
+      renderRun(run);
+      startPolling();
+    } catch (error) {
+      updatePresenter("BLOCKED", error.message);
+    } finally {
+      button.disabled = false;
+      button.innerHTML = "Start campaign <span>↓</span>";
+    }
+  }
+  $("#run-button").addEventListener("click", requestRunCode); $("#run-retry").addEventListener("click", requestRunCode); $("#new-run").addEventListener("click", requestRunCode);
+  $("#run-lock-close").addEventListener("click", closeRunCode);
+  $("#run-lock").addEventListener("click", (event) => { if (event.target.id === "run-lock") closeRunCode(); });
+  $("#run-lock-form").addEventListener("submit", (event) => { event.preventDefault(); const code = $("#run-lock-code").value.trim(); if (!code) return; closeRunCode(); startRun(code); });
   $("#approve-opportunity").addEventListener("click", () => approve("approve-opportunity")); $("#approve-publish").addEventListener("click", () => approve("approve-publish"));
-  async function approve(kind) { if (!state.runId) return; const button = $(`#${kind}`); button.disabled = true; const endpoint = kind === "approve-opportunity" ? "approve-opportunity" : "approve-publish"; try { const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/${endpoint}`), { method: "POST" }); renderRun(await response.json()); startPolling(); } finally { button.disabled = false; } }
+  async function approve(kind) {
+    if (!state.runId) {
+      $("#run-copy").textContent = "This run is not connected to the page. Start or reload the campaign.";
+      return;
+    }
+    const button = $(`#${kind}`);
+    const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "Approving...";
+    const endpoint = kind === "approve-opportunity" ? "approve-opportunity" : "approve-publish";
+    try {
+      const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/${endpoint}`), { method: "POST" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.detail || payload.message || `Approval failed (${response.status})`);
+      }
+      if (!payload.id) {
+        throw new Error("Approval returned no campaign run.");
+      }
+      renderRun(payload);
+      startPolling();
+    } catch (error) {
+      $("#run-copy").textContent = error.message || "Approval failed. Please try again.";
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.innerHTML = originalLabel;
+    }
+  }
   async function regenerateImage(index) { if (!state.runId) return; try { const response = await fetch(apiUrl(`/api/agent/runs/${encodeURIComponent(state.runId)}/regenerate-image/${index}`), { method: "POST" }); if (!response.ok) throw new Error("Image regeneration failed"); renderRun(await response.json()); startPolling(); } catch (error) { $("#run-copy").textContent = error.message; } }
   $("#schedule-button").addEventListener("click", async () => { const endpoint = state.schedule ? "stop" : "start"; const response = await fetch(apiUrl(`/api/agent/schedule/${endpoint}`), { method: "POST" }); const result = await response.json(); state.schedule = Boolean(result.running); $("#schedule-button").textContent = state.schedule ? "Stop schedule" : "Start schedule"; });
   async function loadRecords() { try { const response = await fetch(apiUrl("/api/products")); const data = await response.json(); const products = data.products || []; $("#metric-products").textContent = products.length; $("#metric-pins").textContent = products.reduce((sum, item) => sum + (item.pins || []).filter((pin) => pin.status === "published").length, 0); } catch (_) {} }

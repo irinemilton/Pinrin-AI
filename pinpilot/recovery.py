@@ -25,6 +25,7 @@ class RecoveryController:
         "invalid json", "valid structured json", "no valid structured json",
         "invalid file", "file not found", "dropbox", "pinterest", "gumroad",
     )
+    _repair_markers = ("must choose a price", "price from $1.00 to $3.00")
 
     @classmethod
     def decide(cls, error: BaseException, attempt: int, max_attempts: int) -> RecoveryDecision:
@@ -37,6 +38,8 @@ class RecoveryController:
             return RecoveryDecision("stop", "Critical or irreversible action requires user approval.", True)
         if "prompt is too long" in message or "4000 characters" in message:
             return RecoveryDecision("compact_prompt", "Provider rejected the prompt size.")
+        if any(marker in message for marker in cls._repair_markers):
+            return RecoveryDecision("repair", "Product metadata was incomplete; a bounded default can be applied.")
         if any(marker in message for marker in cls._retry_markers) and attempt < max_attempts - 1:
             return RecoveryDecision("retry", "Transient provider or network failure.")
         if attempt >= max_attempts - 1:

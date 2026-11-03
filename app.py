@@ -41,6 +41,7 @@ config = Config.from_env()
 tracker = PublishTracker()
 orchestrator = Orchestrator(config=config, store=None)
 PINRIN_API_KEY = os.getenv("PINRIN_API_KEY", "")
+ORCHESTRATOR_RUN_CODE = os.getenv("ORCHESTRATOR_RUN_CODE", "")
 frontend_origins = [origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "http://localhost:8000,http://localhost:3000").split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -98,7 +99,10 @@ async def api_status():
 @app.post("/api/agent/run")
 async def start_agent_run(request: Request):
     """Start an autonomous run using server configuration only."""
-    return orchestrator.start(current_user(request))
+    current_user(request)
+    if ORCHESTRATOR_RUN_CODE and request.headers.get("x-pinpilot-run-code") != ORCHESTRATOR_RUN_CODE:
+        raise HTTPException(status_code=403, detail="Only Irine Milton can run this orchestrator")
+    return orchestrator.start(request.headers.get("x-pinrin-user", "default")[:120])
 
 
 @app.get("/api/agent/runs/{run_id}")
