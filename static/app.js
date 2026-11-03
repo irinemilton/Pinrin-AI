@@ -101,15 +101,22 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#run-lock-code").value = "";
     $("#run-lock-code").focus();
   }
+  function requestStartCode() {
+    pendingHistoryAction = { action: "start" };
+    $("#run-lock").classList.remove("hidden");
+    $("#run-lock-error").textContent = "";
+    $("#run-lock-code").value = "";
+    $("#run-lock-code").focus();
+  }
   function closeRunCode() { pendingHistoryAction = null; $("#run-lock").classList.add("hidden"); }
-  async function startRun() {
+  async function startRun(runCode) {
     const button = $("#run-button");
     state.historyRun = false;
     state.historyRunCode = "";
     button.disabled = true;
     button.textContent = "Starting...";
     try {
-      const response = await fetch(apiUrl("/api/agent/run"), { method: "POST" });
+      const response = await fetch(apiUrl("/api/agent/run"), { method: "POST", headers: { "x-pinpilot-run-code": runCode } });
       const run = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(run.detail || run.message || `Unable to start orchestrator (${response.status})`);
       if (!run.id) { $("#configuration-note").textContent = run.message || "An active campaign already exists."; return; }
@@ -123,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
       button.innerHTML = "Start campaign <span>↓</span>";
     }
   }
-  $("#run-button").addEventListener("click", startRun); $("#run-retry").addEventListener("click", startRun); $("#new-run").addEventListener("click", startRun);
+  $("#run-button").addEventListener("click", requestStartCode); $("#run-retry").addEventListener("click", requestStartCode); $("#new-run").addEventListener("click", requestStartCode);
   $("#run-lock-close").addEventListener("click", closeRunCode);
   $("#run-lock").addEventListener("click", (event) => { if (event.target.id === "run-lock") closeRunCode(); });
   $("#run-lock-form").addEventListener("submit", async (event) => {
@@ -132,7 +139,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const pending = pendingHistoryAction;
     if (!code || !pending) return;
     closeRunCode();
-    if (pending.action === "continue") await continueRun(pending.runId, code);
+    if (pending.action === "start") await startRun(code);
+    else if (pending.action === "continue") await continueRun(pending.runId, code);
     else await changeRun(pending.runId, pending.action, code);
   });
   $("#approve-opportunity").addEventListener("click", () => approve("approve-opportunity")); $("#approve-publish").addEventListener("click", () => approve("approve-publish"));

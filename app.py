@@ -72,6 +72,11 @@ def history_authorized(request: Request) -> None:
         raise HTTPException(status_code=403, detail="History action requires the private run code")
 
 
+def run_authorized(request: Request) -> None:
+    if not ORCHESTRATOR_RUN_CODE or request.headers.get("x-pinpilot-run-code") != ORCHESTRATOR_RUN_CODE:
+        raise HTTPException(status_code=403, detail="Starting a campaign requires the private run code")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     html_path = BASE_DIR / "static" / "index.html"
@@ -106,6 +111,7 @@ async def api_status():
 @app.post("/api/agent/run")
 async def start_agent_run(request: Request):
     """Start an autonomous run using server configuration only."""
+    run_authorized(request)
     return orchestrator.start(current_user(request))
 
 
