@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pulse Drum Machine</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RHYTHM LAB / 01</p>
+        <h1>Pulse <span>Drum Machine</span></h1>
+      </div>
+      <div class="status"><i id="status-light"></i><span id="status-text">READY</span></div>
+    </header>
+
+    <section class="transport panel">
+      <button class="play-button" id="play-button" type="button" aria-label="Play pattern">▶</button>
+      <div class="transport-copy">
+        <span class="eyebrow">SEQUENCER</span>
+        <strong id="transport-label">Pattern stopped</strong>
+      </div>
+      <label class="tempo-control">BPM <output id="tempo-value">112</output>
+        <input id="tempo" type="range" min="60" max="180" value="112">
+      </label>
+      <button class="secondary-button" id="clear-button" type="button">Clear</button>
+      <button class="secondary-button" id="random-button" type="button">Randomize</button>
+    </section>
+
+    <section class="sequencer panel">
+      <div class="grid-header">
+        <span>TRACK</span>
+        <div class="step-numbers" id="step-numbers"></div>
+      </div>
+      <div id="tracks"></div>
+    </section>
+
+    <footer>
+      <span>Click pads to program a beat</span>
+      <span><kbd>Space</kbd> play / stop</span>
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
